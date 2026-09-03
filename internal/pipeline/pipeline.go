@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -235,13 +236,71 @@ func (r *Run) LoadTimeline() error {
 }
 
 func (r *Run) LatestRunDirWithHash() string {
+	// Most recent dir whose recipe.json matches this run's storyboard hash.
+	// Glob returns alphabetical (oldest-first for timestamped RunIDs) order,
+	// so iterate from the end and skip the current run dir.
+	current := filepath.Join(r.WorkDir, r.RunID)
 	entries, _ := filepath.Glob(filepath.Join(r.WorkDir, "*", "recipe.json"))
-	for _, p := range entries {
+	sort.Strings(entries)
+	for i := len(entries) - 1; i >= 0; i-- {
+		p := entries[i]
+		if filepath.Dir(p) == current {
+			continue
+		}
 		if rec, err := recipe.LoadJSON(p); err == nil && rec.StoryboardHash == r.Recipe.StoryboardHash {
 			return filepath.Dir(p)
 		}
 	}
 	return ""
+}
+
+// LatestRunDirWithSceneVideo returns the most recent run dir (excluding the
+// current run) whose recipe.json matches this run's storyboard hash AND that
+// contains raw/<sceneID>.webm (or .mp4). Empty string when none exists.
+func (r *Run) LatestRunDirWithSceneVideo(sceneID string) string {
+	current := filepath.Join(r.WorkDir, r.RunID)
+	entries, _ := filepath.Glob(filepath.Join(r.WorkDir, "*", "recipe.json"))
+	sort.Strings(entries)
+	for i := len(entries) - 1; i >= 0; i-- {
+		dir := filepath.Dir(entries[i])
+		if dir == current {
+			continue
+		}
+		rec, err := recipe.LoadJSON(entries[i])
+		if err != nil || rec.StoryboardHash != r.Recipe.StoryboardHash {
+			continue
+		}
+		for _, ext := range []string{".webm", ".mp4"} {
+			if st, err := os.Stat(filepath.Join(dir, "raw", sceneID+ext)); err == nil && !st.IsDir() {
+				return dir
+			}
+		}
+	}
+	return ""
+}
+
+// FindSceneVideo locates the raw capture for sceneID: current run dir first,
+// then the most recent same-hash run dir containing it. Second return value
+// is the run dir that provided the file ("" when not found).
+func (r *Run) FindSceneVideo(sceneID string) (string, string) {
+	for _, ext := range []string{".webm", ".mp4"} {
+		if p := filepath.Join(r.WorkDir, r.RunID, "raw", sceneID+ext); fileExists(p) {
+			return p, filepath.Join(r.WorkDir, r.RunID)
+		}
+	}
+	if dir := r.LatestRunDirWithSceneVideo(sceneID); dir != "" {
+		for _, ext := range []string{".webm", ".mp4"} {
+			if p := filepath.Join(dir, "raw", sceneID+ext); fileExists(p) {
+				return p, dir
+			}
+		}
+	}
+	return "", ""
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
 }
 
 func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName string, headless bool, onEvent func(kind, label string)) (capture.Artifact, error) {
