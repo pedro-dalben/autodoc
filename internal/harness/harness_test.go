@@ -108,8 +108,8 @@ func TestAntigravityProbe(t *testing.T) {
 	if pr.Found || pr.Configured {
 		t.Fatalf("unexpected probe: %+v", pr)
 	}
-	_ = os.MkdirAll(filepath.Join(home, ".config", "antigravity"), 0o755)
-	_ = os.WriteFile(filepath.Join(home, ".config", "antigravity", "config.json"), []byte(`{}`), 0o644)
+	_ = os.MkdirAll(filepath.Join(home, ".gemini", "config"), 0o755)
+	_ = os.WriteFile(filepath.Join(home, ".gemini", "config", "mcp_config.json"), []byte(`{"mcpServers":{}}`), 0o644)
 	pr = h.Probe(home)
 	if !pr.Found || pr.Configured {
 		t.Fatalf("expected found-but-unconfigured: %+v", pr)
@@ -119,6 +119,42 @@ func TestAntigravityProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	pr = h.Probe(home)
+	if !pr.Configured {
+		t.Fatalf("expected configured: %+v", pr)
+	}
+}
+
+func TestAntigravityMCPInstallIdempotent(t *testing.T) {
+	home := testHome(t)
+	h := harness.ByName("antigravity")
+	if h == nil {
+		t.Fatal("antigravity harness missing")
+	}
+	cfgPath := filepath.Join(home, ".gemini", "config", "mcp_config.json")
+	_ = os.MkdirAll(filepath.Dir(cfgPath), 0o755)
+	userCfg := `{"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp@latest"]}}}`
+	_ = os.WriteFile(cfgPath, []byte(userCfg), 0o644)
+	skill := canonicalSkill(t)
+	first, err := h.Install(home, skill, "autodoc")
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if len(first) == 0 {
+		t.Fatal("expected files on first install")
+	}
+	data, _ := os.ReadFile(cfgPath)
+	text := string(data)
+	if !strings.Contains(text, `"autodoc"`) || !strings.Contains(text, `"playwright"`) {
+		t.Fatalf("user server lost or autodoc missing: %s", text)
+	}
+	second, err := h.Install(home, skill, "autodoc")
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if len(second) != 0 {
+		t.Fatalf("re-run must be ZERO diff, changed %v", second)
+	}
+	pr := h.Probe(home)
 	if !pr.Configured {
 		t.Fatalf("expected configured: %+v", pr)
 	}
@@ -135,5 +171,100 @@ func TestAntigravityIDEInstallMarker(t *testing.T) {
 	}
 	if pr.Configured {
 		t.Fatalf("skill missing so must not be configured: %+v", pr)
+	}
+}
+
+func TestOpenCodeInstallIdempotentPreservesUserServers(t *testing.T) {
+	home := testHome(t)
+	h := harness.ByName("opencode")
+	if h == nil {
+		t.Fatal("opencode harness missing")
+	}
+	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	_ = os.MkdirAll(filepath.Dir(cfgPath), 0o755)
+	userCfg := `{"mcp":{"servers":{"playwright":{"type":"local","command":["npx","@playwright/mcp@latest"]}}}}`
+	_ = os.WriteFile(cfgPath, []byte(userCfg), 0o644)
+	skill := canonicalSkill(t)
+	first, err := h.Install(home, skill, "autodoc")
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if len(first) == 0 {
+		t.Fatal("expected files on first install")
+	}
+	data, _ := os.ReadFile(cfgPath)
+	text := string(data)
+	if !strings.Contains(text, `"autodoc"`) || !strings.Contains(text, `"playwright"`) {
+		t.Fatalf("user server lost or autodoc missing: %s", text)
+	}
+	if !strings.Contains(text, `"type": "local"`) && !strings.Contains(text, `"type":"local"`) {
+		t.Fatalf("opencode local type missing: %s", text)
+	}
+	second, err := h.Install(home, skill, "autodoc")
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if len(second) != 0 {
+		t.Fatalf("re-run must be ZERO diff, changed %v", second)
+	}
+	pr := h.Probe(home)
+	if !pr.Configured {
+		t.Fatalf("expected configured: %+v", pr)
+	}
+}
+
+func TestOpenCodeUninstallRefusesForeignServer(t *testing.T) {
+	home := testHome(t)
+	h := harness.ByName("opencode")
+	cfgPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	_ = os.MkdirAll(filepath.Dir(cfgPath), 0o755)
+	foreign := `{"mcp":{"servers":{"autodoc":{"type":"local","command":["someone-else","mcp"]}}}}`
+	_ = os.WriteFile(cfgPath, []byte(foreign), 0o644)
+	skill := canonicalSkill(t)
+	if _, err := h.Install(home, skill, "autodoc"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(cfgPath)
+	if !strings.Contains(string(data), `"autodoc"`) {
+		t.Fatalf("autodoc server should be adopted: %s", data)
+	}
+	if _, err := h.Uninstall(home); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCodexMCPInstallIdempotent(t *testing.T) {
+	home := testHome(t)
+	h := harness.ByName("codex")
+	if h == nil {
+		t.Fatal("codex harness missing")
+	}
+	cfgPath := filepath.Join(home, ".codex", "config.toml")
+	_ = os.MkdirAll(filepath.Dir(cfgPath), 0o755)
+	userCfg := "model = \"gpt-5\"\n\n[mcp_servers.playwright]\ncommand = \"npx\"\nargs = [\"@playwright/mcp@latest\"]\n"
+	_ = os.WriteFile(cfgPath, []byte(userCfg), 0o600)
+	skill := canonicalSkill(t)
+	first, err := h.Install(home, skill, "autodoc")
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if len(first) == 0 {
+		t.Fatal("expected files on first install")
+	}
+	data, _ := os.ReadFile(cfgPath)
+	text := string(data)
+	if !strings.Contains(text, "[mcp_servers.autodoc]") || !strings.Contains(text, "[mcp_servers.playwright]") {
+		t.Fatalf("user server lost or autodoc missing: %s", text)
+	}
+	second, err := h.Install(home, skill, "autodoc")
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if len(second) != 0 {
+		t.Fatalf("re-run must be ZERO diff, changed %v", second)
+	}
+	pr := h.Probe(home)
+	if !pr.Configured {
+		t.Fatalf("expected configured: %+v", pr)
 	}
 }
