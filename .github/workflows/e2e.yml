@@ -1,0 +1,26 @@
+name: e2e
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - name: Install FFmpeg and browser deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg xvfb \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxfixes3 libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 libcairo2
+      - name: Full deterministic pipeline
+        run: xvfb-run -a go test ./test/e2e/ -count=1 -timeout 25m -v

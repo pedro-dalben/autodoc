@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master, feat/**]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Check formatting
+        run: test -z "$(gofmt -l ./cmd ./internal ./test)"
+      - name: Vet
+        run: go vet ./...
+      - name: Unit and integration tests
+        run: go test ./internal/... -count=1
+      - name: Build
+        run: go build ./...

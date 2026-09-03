@@ -1,0 +1,31 @@
+version: "2"
+project_name: autodoc
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: autodoc
+    main: ./cmd/autodoc
+    binary: autodoc
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/pedro-dalben/autodoc/internal/version.Commit={{ .Commit }} -X github.com/pedro-dalben/autodoc/internal/version.Date={{ .Date }}
+archives:
+  - id: default
+    formats: [tar.gz, zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+snapshot:
+  version_template: "0.1.0-dev"
+changelog:
+  sort: asc
+  use: github
+release:
+  draft: true
+  prerelease: auto

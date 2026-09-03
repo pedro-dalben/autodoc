@@ -1,0 +1,29 @@
+# Local agent state
+.commandcode/
+
+# Build outputs
+/autodoc
+/dist/
+*.exe
+*.test
+*.out
+
+# Go workspace extras
+vendor/
+
+# AutoDoc runtime artifacts (intermediates + local caches)
+.autodoc/
+docs/autodoc/*/
+!docs/autodoc/gerenciando-materiais/
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Temp
+/tmp/
+*.log

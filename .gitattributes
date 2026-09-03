@@ -1,0 +1,6 @@
+# Normalize line endings; keep binaries untouched
+* text=auto eol=lf
+*.mp4 binary
+*.png binary
+*.webm binary
+*.wav binary
