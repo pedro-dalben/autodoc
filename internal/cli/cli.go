@@ -61,14 +61,14 @@ func newVersionCmd() *cobra.Command {
 
 func loadProject(cmd *cobra.Command, storyboardFlag string) (root string, cfg *config.Config, sbPath string, err error) {
 	cwd, _ := os.Getwd()
-	root, err = config.FindProjectRoot(cwd)
+	lc, err := config.FindConfig(cwd)
 	if err != nil {
 		return "", nil, "", err
 	}
-	cfg, err = config.Load(filepath.Join(root, "autodoc.toml"))
-	if err != nil {
-		return "", nil, "", err
+	if lc.Source == "default" {
+		return "", nil, "", fmt.Errorf("autodoc.toml not found (run autodoc init first)")
 	}
+	root, cfg = lc.Root, lc.Config
 	if storyboardFlag != "" {
 		sbPath = storyboardFlag
 		if !filepath.IsAbs(sbPath) {
@@ -83,6 +83,7 @@ func loadProject(cmd *cobra.Command, storyboardFlag string) (root string, cfg *c
 func newInitCmd() *cobra.Command {
 	var opts struct {
 		nonInteractive bool
+		global         bool
 		ttsProvider    string
 		ttsBaseURL     string
 		ttsModel       string
@@ -120,21 +121,39 @@ func newInitCmd() *cobra.Command {
 				}
 				return fmt.Errorf("invalid configuration")
 			}
-			cfgPath := filepath.Join(cwd, "autodoc.toml")
-			existed := fileExists(cfgPath)
-			if err := cfg.Save(cfgPath); err != nil {
-				return err
-			}
-			if existed {
-				fmt.Fprintln(out, "updated autodoc.toml (preserved project-local settings)")
-			} else {
-				fmt.Fprintln(out, "wrote autodoc.toml")
-			}
-			if _, err := os.Stat(filepath.Join(cwd, "storyboard.yml")); os.IsNotExist(err) {
-				if err := storyboard.WriteExample(filepath.Join(cwd, "storyboard.yml")); err != nil {
+			if opts.global {
+				gp, err := config.GlobalPath()
+				if err != nil {
 					return err
 				}
-				fmt.Fprintln(out, "wrote storyboard.yml (example — edit me)")
+				cfg.Project.Name = "global"
+				existed := fileExists(gp)
+				if err := cfg.Save(gp); err != nil {
+					return err
+				}
+				if existed {
+					fmt.Fprintf(out, "updated %s\n", gp)
+				} else {
+					fmt.Fprintf(out, "wrote %s\n", gp)
+				}
+				fmt.Fprintln(out, "project configs keep priority: ./autodoc.toml overrides this global file")
+			} else {
+				cfgPath := filepath.Join(cwd, "autodoc.toml")
+				existed := fileExists(cfgPath)
+				if err := cfg.Save(cfgPath); err != nil {
+					return err
+				}
+				if existed {
+					fmt.Fprintln(out, "updated autodoc.toml (preserved project-local settings)")
+				} else {
+					fmt.Fprintln(out, "wrote autodoc.toml")
+				}
+				if _, err := os.Stat(filepath.Join(cwd, "storyboard.yml")); os.IsNotExist(err) {
+					if err := storyboard.WriteExample(filepath.Join(cwd, "storyboard.yml")); err != nil {
+						return err
+					}
+					fmt.Fprintln(out, "wrote storyboard.yml (example — edit me)")
+				}
 			}
 			home := harness.HomeDir()
 			exe, _ := os.Executable()
@@ -213,6 +232,7 @@ func newInitCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.nonInteractive, "non-interactive", false, "skip prompts")
+	cmd.Flags().BoolVar(&opts.global, "global", false, "write machine-wide ~/.config/autodoc/autodoc.toml instead of ./autodoc.toml")
 	cmd.Flags().StringVar(&opts.ttsProvider, "tts-provider", "", "tts provider (openai-compatible|disabled)")
 	cmd.Flags().StringVar(&opts.ttsBaseURL, "tts-base-url", "", "tts base url")
 	cmd.Flags().StringVar(&opts.ttsModel, "tts-model", "", "tts model")
@@ -530,18 +550,11 @@ func newRenderCmd() *cobra.Command {
 				return err
 			}
 			sceneVideos := map[string]string{}
-			rawCandidates := []string{filepath.Join(run.WorkDir, run.RunID, "raw")}
-			if latest := run.LatestRunDirWithHash(); latest != "" && latest != filepath.Join(run.WorkDir, run.RunID) {
-				rawCandidates = append(rawCandidates, filepath.Join(latest, "raw"))
-			}
 			for _, sc := range run.Recipe.Scenes {
-				for _, rawDir := range rawCandidates {
-					for _, ext := range []string{".webm", ".mp4"} {
-						if p := filepath.Join(rawDir, sc.ID+ext); fileExists(p) {
-							if _, ok := sceneVideos[sc.ID]; !ok {
-								sceneVideos[sc.ID] = p
-							}
-						}
+				if p, srcDir := run.FindSceneVideo(sc.ID); p != "" {
+					sceneVideos[sc.ID] = p
+					if srcDir != "" && srcDir != filepath.Join(run.WorkDir, run.RunID) {
+						fmt.Fprintf(cmd.OutOrStdout(), "scene %s: using raw from %s\n", sc.ID, srcDir)
 					}
 				}
 			}
@@ -821,11 +834,9 @@ func resolveFromCwd(sbPath string) (string, *config.Config, string, error) {
 	}
 	root := filepath.Dir(sbPath)
 	cfg := config.Default()
-	if r, err := config.FindProjectRoot(filepath.Dir(sbPath)); err == nil {
-		root = r
-		if c2, err := config.Load(filepath.Join(r, "autodoc.toml")); err == nil {
-			cfg = c2
-		}
+	if lc, err := config.FindConfig(filepath.Dir(sbPath)); err == nil && lc.Source != "default" {
+		root = lc.Root
+		cfg = lc.Config
 	}
 	return root, cfg, sbPath, nil
 }
@@ -857,6 +868,11 @@ func canonicalSkillPath() string {
 		if fileExists(c) {
 			abs, _ := filepath.Abs(c)
 			return abs
+		}
+	}
+	if d, err := install.DataDir(); err == nil {
+		if p := filepath.Join(d, "skill", "SKILL.md"); fileExists(p) {
+			return p
 		}
 	}
 	return "src/skill/autodoc/SKILL.md"
@@ -1024,6 +1040,8 @@ func displayHarness(name string) string {
 		return "Antigravity"
 	case "gemini":
 		return "Gemini CLI"
+	case "opencode":
+		return "OpenCode"
 	case "cursor":
 		return "Cursor (best-effort)"
 	default:

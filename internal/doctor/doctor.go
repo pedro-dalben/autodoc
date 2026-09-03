@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/mxschmitt/playwright-go"
+	"github.com/pedro-dalben/autodoc/internal/config"
 	"github.com/pedro-dalben/autodoc/internal/harness"
 	"github.com/pedro-dalben/autodoc/internal/install"
 	"github.com/pedro-dalben/autodoc/internal/media"
@@ -97,10 +98,18 @@ func AutodocSection() Section {
 	s.Checks = append(s.Checks, ok("binary", exe))
 	s.Checks = append(s.Checks, ok("platform", fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)))
 	s.Checks = append(s.Checks, ok("cwd", cwd))
-	if _, err := os.Stat(filepath.Join(cwd, "autodoc.toml")); err == nil {
-		s.Checks = append(s.Checks, ok("config", "autodoc.toml found"))
+	cwd, _ = filepath.Abs(cwd)
+	if lc, err := config.FindConfig(cwd); err != nil {
+		s.Checks = append(s.Checks, warn("config", err.Error()))
 	} else {
-		s.Checks = append(s.Checks, warn("config", "autodoc.toml not found (run autodoc init)"))
+		switch lc.Source {
+		case "project":
+			s.Checks = append(s.Checks, ok("config", redactHome(lc.Path)+" (project)"))
+		case "global":
+			s.Checks = append(s.Checks, ok("config", redactHome(lc.Path)+" (global)"))
+		default:
+			s.Checks = append(s.Checks, warn("config", "autodoc.toml not found (run autodoc init)"))
+		}
 	}
 	return s
 }
@@ -241,7 +250,13 @@ func BrowserLogin(profile, url string) error {
 func TTSSection() Section {
 	s := Section{Name: "TTS"}
 	cwd, _ := os.Getwd()
-	cfgPath := filepath.Join(cwd, "autodoc.toml")
+	cwd, _ = filepath.Abs(cwd)
+	lc, err := config.FindConfig(cwd)
+	if err != nil || lc.Source == "default" {
+		s.Checks = append(s.Checks, warn("config", "autodoc.toml not found"))
+		return s
+	}
+	cfgPath := lc.Path
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		s.Checks = append(s.Checks, warn("config", "autodoc.toml not found"))
@@ -260,7 +275,7 @@ func TTSSection() Section {
 			s.Checks = append(s.Checks, fail("secrets", "possible secret literal in autodoc.toml (use env vars)"))
 		}
 	}
-	s.Checks = append(s.Checks, ok("provider", redactValue(provider)))
+	s.Checks = append(s.Checks, ok("provider", redactValue(provider)+" ("+lc.Source+")"))
 	if provider == "disabled" {
 		s.Checks = append(s.Checks, ok("mode", "silent pacing, no network needed"))
 		return s
@@ -318,6 +333,14 @@ func SkillSection() Section {
 	if canonical == "" {
 		if exe, err := os.Executable(); err == nil {
 			c := filepath.Join(filepath.Dir(exe), "..", "share", "autodoc", "skill", "SKILL.md")
+			if _, err := os.Stat(c); err == nil {
+				canonical = c
+			}
+		}
+	}
+	if canonical == "" {
+		if d, err := install.DataDir(); err == nil {
+			c := filepath.Join(d, "skill", "SKILL.md")
 			if _, err := os.Stat(c); err == nil {
 				canonical = c
 			}
