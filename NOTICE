@@ -1,0 +1,9 @@
+# AutoDoc
+
+Copyright 2026 AutoDoc contributors.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Third-party components keep their own licenses — see THIRD_PARTY_NOTICES.md.
+FFmpeg, Playwright browsers, and TTS model weights are external runtime
+dependencies: used if present, never redistributed by this repository.
