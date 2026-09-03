@@ -110,6 +110,55 @@ func FindProjectRoot(start string) (string, error) {
 	}
 }
 
+// GlobalPath returns the machine-wide config path:
+// $AUTODOC_CONFIG_HOME/autodoc.toml, else $XDG_CONFIG_HOME/autodoc/autodoc.toml,
+// else ~/.config/autodoc/autodoc.toml. The same base dir hosts installations.json.
+func GlobalPath() (string, error) {
+	if v := os.Getenv("AUTODOC_CONFIG_HOME"); v != "" {
+		return filepath.Join(v, "autodoc.toml"), nil
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "autodoc", "autodoc.toml"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "autodoc", "autodoc.toml"), nil
+}
+
+// LoadedConfig is the result of FindConfig: which file (if any) supplied
+// the effective configuration. Source is "project", "global", or "default"
+// (no file found; built-in defaults).
+type LoadedConfig struct {
+	Config *Config
+	Root   string
+	Path   string
+	Source string
+}
+
+// FindConfig resolves the effective configuration for a working directory:
+// ./autodoc.toml walking upward (project), else the global
+// ~/.config/autodoc/autodoc.toml, else built-in defaults. Never errors on a
+// missing file; a corrupt TOML returns an error.
+func FindConfig(start string) (*LoadedConfig, error) {
+	if root, err := FindProjectRoot(start); err == nil {
+		cfg, err := Load(filepath.Join(root, "autodoc.toml"))
+		if err != nil {
+			return nil, err
+		}
+		return &LoadedConfig{Config: cfg, Root: root, Path: filepath.Join(root, "autodoc.toml"), Source: "project"}, nil
+	}
+	if gp, err := GlobalPath(); err == nil {
+		if cfg, err := Load(gp); err == nil {
+			return &LoadedConfig{Config: cfg, Root: start, Path: gp, Source: "global"}, nil
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	return &LoadedConfig{Config: Default(), Root: start, Source: "default"}, nil
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
