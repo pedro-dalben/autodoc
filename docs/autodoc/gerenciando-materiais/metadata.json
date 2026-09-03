@@ -1,0 +1,12 @@
+{
+  "autodoc_version": "0.1.0",
+  "description": "Tutorial fixture: listagem e cadastro de materiais",
+  "duration_s": 17.4,
+  "language": "pt-BR",
+  "scenes": [
+    "scene-001",
+    "scene-002"
+  ],
+  "storyboard_hash": "6dc277d22b196aaf",
+  "title": "Gerenciando materiais"
+}

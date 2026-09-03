@@ -1,0 +1,160 @@
+{
+  "storyboard_hash": "6dc277d22b196aaf",
+  "total_s": 17.4,
+  "segments": [
+    {
+      "speech_id": "scene-001-beat-01-speech-001",
+      "text": "Acesse com o usuário de demonstração.",
+      "start_s": 0,
+      "end_s": 2.466666666666667,
+      "duration_s": 2.466666666666667,
+      "cached": true,
+      "wav_path": "/tmp/vidfinal/.autodoc/_work/20260903-165840/audio/scene-001-beat-01-speech-001.wav"
+    },
+    {
+      "speech_id": "scene-001-beat-01-speech-002",
+      "text": "Nesta tela encontramos os materiais cadastrados.",
+      "start_s": 3.066666666666667,
+      "end_s": 6.2666666666666675,
+      "duration_s": 3.2,
+      "cached": true,
+      "wav_path": "/tmp/vidfinal/.autodoc/_work/20260903-165840/audio/scene-001-beat-01-speech-002.wav"
+    },
+    {
+      "speech_id": "scene-002-beat-01-speech-001",
+      "text": "Acesse novamente com o usuário de demonstração.",
+      "start_s": 6.866666666666667,
+      "end_s": 10,
+      "duration_s": 3.1333333333333333,
+      "cached": true,
+      "wav_path": "/tmp/vidfinal/.autodoc/_work/20260903-165840/audio/scene-002-beat-01-speech-001.wav"
+    },
+    {
+      "speech_id": "scene-002-beat-01-speech-002",
+      "text": "Clique em Novo para cadastrar um material.",
+      "start_s": 10.6,
+      "end_s": 13.399999999999999,
+      "duration_s": 2.8,
+      "cached": true,
+      "wav_path": "/tmp/vidfinal/.autodoc/_work/20260903-165840/audio/scene-002-beat-01-speech-002.wav"
+    },
+    {
+      "speech_id": "scene-002-beat-01-speech-003",
+      "text": "Preencha os campos e salve para concluir.",
+      "start_s": 13.999999999999998,
+      "end_s": 16.799999999999997,
+      "duration_s": 2.8,
+      "cached": true,
+      "wav_path": "/tmp/vidfinal/.autodoc/_work/20260903-165840/audio/scene-002-beat-01-speech-003.wav"
+    }
+  ],
+  "markers": [
+    {
+      "scene_id": "scene-001",
+      "beat_id": "beat-01",
+      "kind": "speech",
+      "label": "scene-001-beat-01-speech-001",
+      "at_s": 0
+    },
+    {
+      "scene_id": "scene-001",
+      "beat_id": "beat-01",
+      "kind": "action",
+      "label": "click test-id=login-btn",
+      "at_s": 2.466666666666667
+    },
+    {
+      "scene_id": "scene-001",
+      "beat_id": "beat-01",
+      "kind": "wait",
+      "label": "visible",
+      "at_s": 2.466666666666667
+    },
+    {
+      "scene_id": "scene-001",
+      "beat_id": "beat-01",
+      "kind": "speech",
+      "label": "scene-001-beat-01-speech-002",
+      "at_s": 3.066666666666667
+    },
+    {
+      "scene_id": "scene-001",
+      "beat_id": "beat-01",
+      "kind": "hold",
+      "label": "600ms",
+      "at_s": 6.2666666666666675
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "speech",
+      "label": "scene-002-beat-01-speech-001",
+      "at_s": 6.866666666666667
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "action",
+      "label": "click test-id=login-btn",
+      "at_s": 10
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "wait",
+      "label": "visible",
+      "at_s": 10
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "speech",
+      "label": "scene-002-beat-01-speech-002",
+      "at_s": 10.6
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "action",
+      "label": "click test-id=new-material-btn",
+      "at_s": 13.399999999999999
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "wait",
+      "label": "visible",
+      "at_s": 13.399999999999999
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "speech",
+      "label": "scene-002-beat-01-speech-003",
+      "at_s": 13.999999999999998
+    },
+    {
+      "scene_id": "scene-002",
+      "beat_id": "beat-01",
+      "kind": "hold",
+      "label": "600ms",
+      "at_s": 16.799999999999997
+    }
+  ],
+  "scene_clips": [
+    {
+      "scene_id": "scene-001",
+      "start_s": 0,
+      "end_s": 6.866666666666667,
+      "duration_s": 6.866666666666667
+    },
+    {
+      "scene_id": "scene-002",
+      "start_s": 6.866666666666667,
+      "end_s": 17.4,
+      "duration_s": 10.533333333333331
+    }
+  ],
+  "holds_s": 1.2,
+  "speech_s": 14.400000000000002
+}
