@@ -1,0 +1,28 @@
+[project]
+name = "fixture"
+language = "pt-BR"
+
+[tts]
+provider = "openai-compatible"
+base_url = "http://localhost:8880/v1"
+model = "kokoro"
+voice = "af_bella"
+language = "pt-BR"
+speed = 1.0
+response_format = "wav"
+
+[media]
+resolution = "1280x720"
+fps = 30
+codec = "libx264"
+
+[browser]
+profile = "docs"
+headless = true
+viewport_width = 1280
+viewport_height = 720
+
+[paths]
+storyboard = "storyboard.yml"
+work_dir = ".autodoc/_work"
+output_dir = "docs/autodoc"
