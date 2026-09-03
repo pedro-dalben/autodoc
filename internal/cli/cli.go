@@ -40,6 +40,7 @@ func NewRoot() *cobra.Command {
 		newRenderCmd(),
 		newExportCmd(),
 		newValidateCmd(),
+		newAuthCmd(),
 		newBrowserCmd(),
 		newMCPCmd(),
 		newUninstallCmd(),
@@ -490,6 +491,9 @@ func newRecordCmd() *cobra.Command {
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "scene %s: video=%s events=%d\n", id, art.VideoPath, len(art.Events))
 			}
+			if run.Final != nil && run.Final.Sync != nil {
+				printSyncReport(cmd.OutOrStdout(), run.Final)
+			}
 			return nil
 		},
 	}
@@ -504,9 +508,10 @@ func newRecordCmd() *cobra.Command {
 func newRenderCmd() *cobra.Command {
 	var sbPath, outMP4 string
 	var width, height, fps int
+	var noZoom, debugCues, debugTimeline bool
 	cmd := &cobra.Command{
 		Use:   "render",
-		Short: "Render final MP4 from timeline (FFmpeg H.264+AAC)",
+		Short: "Render final MP4 from the reconciled timeline (FFmpeg H.264+AAC)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, cfg, resolved, err := loadProject(cmd, sbPath)
 			if err != nil {
@@ -558,13 +563,41 @@ func newRenderCmd() *cobra.Command {
 					}
 				}
 			}
-			if err := media.BuildFinalMP4(run.Timeline, media.RenderOptions{
+			if err := run.LoadFinal(); err != nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "no final timeline (record with this binary first); legacy planned render")
+				if err := media.BuildFinalMP4(run.Timeline, media.RenderOptions{
+					Width: width, Height: height, FPS: fps,
+					SceneVideo: sceneVideos, WorkDir: run.WorkDir, OutputMP4: outMP4,
+				}); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "rendered %s (%.2fs)\n", outMP4, run.Timeline.TotalS)
+				return nil
+			}
+			if debugTimeline {
+				fmt.Fprintf(cmd.OutOrStdout(), "final timeline: %d segments, %.2fs total (%d speech)\n",
+					len(run.Final.Segments), run.Final.TotalS, len(run.Final.Speeches))
+				for _, sg := range run.Final.Segments {
+					fmt.Fprintf(cmd.OutOrStdout(), "  [%s] %-6s %-34s video %.2f-%.2f speed %.2fx zoom %.2f%s\n",
+						sg.SceneID, sg.Kind, sg.Label, sg.VideoStartS, sg.VideoEndS, sg.Speed, sg.Zoom, estimatedMark(sg.Estimated))
+				}
+			}
+			debugPath := ""
+			if debugCues {
+				debugPath = filepath.Join(run.WorkDir, run.RunID, "cues-debug.json")
+			}
+			if err := media.RenderCinematic(run.Final, media.CinematicOptions{
 				Width: width, Height: height, FPS: fps,
 				SceneVideo: sceneVideos, WorkDir: run.WorkDir, OutputMP4: outMP4,
+				NoZoom: noZoom, DebugCuesPath: debugPath,
 			}); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "rendered %s (%.2fs)\n", outMP4, run.Timeline.TotalS)
+			fmt.Fprintf(cmd.OutOrStdout(), "rendered %s (%.2fs)\n", outMP4, run.Final.TotalS)
+			if debugPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "cue debug: %s\n", debugPath)
+			}
+			printSyncReport(cmd.OutOrStdout(), run.Final)
 			return nil
 		},
 	}
@@ -572,6 +605,9 @@ func newRenderCmd() *cobra.Command {
 	cmd.Flags().StringVar(&outMP4, "out", "", "output mp4 path")
 	cmd.Flags().IntVar(&width, "width", 0, "output width")
 	cmd.Flags().IntVar(&height, "height", 0, "output height")
+	cmd.Flags().BoolVar(&noZoom, "no-zoom", false, "disable render-time camera focus")
+	cmd.Flags().BoolVar(&debugCues, "debug-cues", false, "write cues-debug.json (bbox, zooms, segments)")
+	cmd.Flags().BoolVar(&debugTimeline, "debug-timeline", false, "print reconciled segment table")
 	cmd.Flags().IntVar(&fps, "fps", 0, "output fps")
 	return cmd
 }
@@ -639,6 +675,9 @@ func newExportCmd() *cobra.Command {
 			_ = media.MakeThumbnail(dstMP4, filepath.Join(outDir, "thumbnail.png"), 0.5, 640)
 			_ = copyFile(resolved, filepath.Join(outDir, "storyboard.yml"))
 			_ = run.Timeline.WriteJSON(filepath.Join(outDir, "timeline.json"))
+			if err := run.LoadFinal(); err == nil && run.Final != nil {
+				_ = run.Final.WriteJSON(filepath.Join(outDir, "final_timeline.json"))
+			}
 			writeMetadata(outDir, run)
 			writeTutorialMD(outDir, run)
 			shotsSrc := filepath.Join(run.WorkDir, run.RunID, "screenshots")
@@ -670,6 +709,7 @@ func newExportCmd() *cobra.Command {
 
 func newValidateCmd() *cobra.Command {
 	var sbPath string
+	var syncOnly bool
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate storyboard + timeline + artifacts coherence",
@@ -693,11 +733,83 @@ func newValidateCmd() *cobra.Command {
 				return fmt.Errorf("timeline stale: storyboard changed since tts (re-run tts)")
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "validate OK: %d segments, %.2fs total\n", len(run.Timeline.Segments), run.Timeline.TotalS)
+			if err := run.LoadFinal(); err != nil {
+				if syncOnly {
+					return fmt.Errorf("no final timeline; run record first: %w", err)
+				}
+				return nil
+			}
+			printSyncReport(cmd.OutOrStdout(), run.Final)
+			if syncOnly && run.Final.Sync != nil && !run.Final.Sync.Pass {
+				return fmt.Errorf("sync check FAILED")
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
+	cmd.Flags().BoolVar(&syncOnly, "sync", false, "only report A/V synchronization (fails when drift exceeds tolerance)")
 	return cmd
+}
+
+func newAuthCmd() *cobra.Command {
+	var sbPath string
+	c := &cobra.Command{Use: "auth", Short: "Off-camera authentication setup"}
+	bootstrap := &cobra.Command{
+		Use:   "bootstrap",
+		Short: "Run setup.sequence off-camera and cache the session (secrets via env, never recorded)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, cfg, resolved, err := loadProject(cmd, sbPath)
+			if err != nil {
+				return err
+			}
+			run, err := pipeline.NewRun(root, resolved, cfg)
+			if err != nil {
+				return err
+			}
+			if err := run.Compile(); err != nil {
+				return err
+			}
+			state, err := run.BootstrapAuth(true)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "auth state cached: %s\n", state)
+			fmt.Fprintln(cmd.OutOrStdout(), "record reuses it automatically; rotate by editing setup.sequence")
+			return nil
+		},
+	}
+	bootstrap.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
+	c.AddCommand(bootstrap)
+	return c
+}
+
+func printSyncReport(out interface{ Write([]byte) (int, error) }, ft *timeline.FinalTimeline) {
+	if ft == nil || ft.Sync == nil {
+		return
+	}
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "AutoDoc Sync")
+	fmt.Fprintln(out, "")
+	for _, it := range ft.Sync.Items {
+		status := "PASS"
+		if !it.Pass {
+			status = "FAIL"
+		}
+		fmt.Fprintf(out, "%-42s %+7.0fms  %s\n", it.Scope, it.DriftMs, status)
+	}
+	fmt.Fprintln(out, "------------------------------")
+	status := "PASS"
+	if !ft.Sync.Pass {
+		status = "FAIL"
+	}
+	fmt.Fprintf(out, "MAX %+33.0fms\nSTATUS %27s\n", ft.Sync.MaxDriftMs, status)
+}
+
+func estimatedMark(est bool) string {
+	if est {
+		return " (estimated)"
+	}
+	return ""
 }
 
 func newBrowserCmd() *cobra.Command {
@@ -884,6 +996,12 @@ func writeMetadata(outDir string, run *pipeline.Run) {
 		"language": run.SB.Meta.Language, "storyboard_hash": run.Recipe.StoryboardHash,
 		"duration_s": run.Timeline.TotalS, "scenes": run.Recipe.SceneIDs(),
 		"autodoc_version": version.Version,
+	}
+	if run.Final != nil {
+		meta["final_duration_s"] = run.Final.TotalS
+		if run.Final.Sync != nil {
+			meta["sync"] = map[string]any{"pass": run.Final.Sync.Pass, "max_drift_ms": run.Final.Sync.MaxDriftMs}
+		}
 	}
 	b, _ := json.MarshalIndent(meta, "", "  ")
 	_ = os.WriteFile(filepath.Join(outDir, "metadata.json"), append(b, '\n'), 0o644)

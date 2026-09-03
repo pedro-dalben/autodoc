@@ -26,6 +26,7 @@ type Run struct {
 	SB         *storyboard.Storyboard
 	Recipe     *recipe.Recipe
 	Timeline   *timeline.Timeline
+	Final      *timeline.FinalTimeline
 	WorkDir    string
 	RunID      string
 }
@@ -73,14 +74,32 @@ func ScanSecrets(sb *storyboard.Storyboard) error {
 				if ev.Action != nil {
 					check(where, ev.Action.Value+" "+ev.Action.Text)
 					if ev.Action.Type == "fill" || ev.Action.Type == "type" {
+						if ev.Action.SecretRef != "" {
+							continue
+						}
 						v := ev.Action.Value
 						if v == "" {
 							v = ev.Action.Text
 						}
 						if looksLikeSecret(v) {
-							hits = append(hits, fmt.Sprintf("%s: fill value looks like a credential; use fixture or mask", where))
+							hits = append(hits, fmt.Sprintf("%s: fill value looks like a credential; use secret_ref or fixture", where))
 						}
 					}
+				}
+			}
+		}
+	}
+	for i, st := range sb.Setup.Sequence {
+		where := fmt.Sprintf("setup.sequence[%d]", i)
+		if st.Action != nil {
+			check(where, st.Action.Value+" "+st.Action.Text)
+			if st.Action.SecretRef == "" {
+				v := st.Action.Value
+				if v == "" {
+					v = st.Action.Text
+				}
+				if looksLikeSecret(v) {
+					hits = append(hits, fmt.Sprintf("%s: setup value looks like a credential; use secret_ref", where))
 				}
 			}
 		}
@@ -309,39 +328,41 @@ func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName strin
 	if sc == nil {
 		return capture.Artifact{}, fmt.Errorf("scene %q not found", sceneID)
 	}
+	if r.Timeline == nil {
+		if err := r.LoadTimeline(); err != nil {
+			return capture.Artifact{}, err
+		}
+	}
+	speechMs := map[string]int64{}
+	for _, seg := range r.Timeline.Segments {
+		speechMs[seg.SpeechID] = int64(seg.DurationS*1000 + 0.5)
+	}
+	setupState, err := r.ensureSetupState(headless)
+	if err != nil {
+		return capture.Artifact{}, err
+	}
 	be, err := capture.Get(backendName)
 	if err != nil {
 		return capture.Artifact{}, err
 	}
 	cfg := r.Config
-	vw, vh := cfg.Browser.ViewportW, cfg.Browser.ViewportH
-	if vw == 0 {
-		vw = r.SB.Config.ViewportW
-	}
-	if vh == 0 {
-		vh = r.SB.Config.ViewportH
-	}
-	if vw == 0 {
-		vw = 1280
-	}
-	if vh == 0 {
-		vh = 720
-	}
-	baseURL := cfg.Browser.StorageState
-	_ = baseURL
+	vw, vh := viewportOf(r)
 	rawDir := filepath.Join(r.WorkDir, r.RunID, "raw")
 	if err := os.MkdirAll(rawDir, 0o755); err != nil {
 		return capture.Artifact{}, err
 	}
+	vis := r.SB.VisualsOrDefault()
 	opts := capture.StartOptions{
 		SceneID: sceneID, ViewportW: vw, ViewportH: vh, Headless: headless,
 		BaseURL:  firstNonEmpty(r.SB.Config.BaseURL, cfg.TTS.BaseURL),
-		VideoDir: rawDir, Redact: r.SB.Redact,
+		VideoDir: rawDir, Redact: r.SB.Redact, Visuals: vis,
 	}
 	if r.SB.Config.BaseURL != "" {
 		opts.BaseURL = r.SB.Config.BaseURL
 	}
-	if cfg.Browser.StorageState != "" {
+	if setupState != "" {
+		opts.StorageState = setupState
+	} else if cfg.Browser.StorageState != "" {
 		opts.StorageState = absJoin(r.Root, cfg.Browser.StorageState)
 	} else if r.SB.Setup.StorageState != "" {
 		opts.StorageState = absJoin(r.Root, r.SB.Setup.StorageState)
@@ -366,24 +387,66 @@ func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName strin
 		emit("navigate", startURL)
 	}
 	be.ShowChapter(sc.Title)
+	type item struct {
+		beat string
+		st   recipe.StepPlan
+	}
+	var items []item
 	for _, b := range sc.Beats {
 		for _, st := range b.Steps {
-			switch st.Kind {
-			case recipe.StepAction:
-				res, err := be.DoAction(*st.Action)
-				_ = res
-				if err != nil {
-					return capture.Artifact{}, fmt.Errorf("scene %s action %s: %w", sceneID, st.Action.Type, err)
-				}
-				emit("action", st.Action.Type)
-			case recipe.StepWait:
-				if _, err := be.DoWait(*st.Wait); err != nil {
-					return capture.Artifact{}, err
-				}
-				emit("wait", st.Wait.State)
-			case recipe.StepSpeech, recipe.StepHold:
+			items = append(items, item{beat: b.ID, st: st})
+		}
+	}
+	kindOf := func(it item) recipe.StepKind { return it.st.Kind }
+	prevKind := recipe.StepKind("")
+	for i, it := range items {
+		var nextKind recipe.StepKind
+		if i+1 < len(items) {
+			nextKind = kindOf(items[i+1])
+		}
+		// Narration padding: intentional human-feeling gaps at speech
+		// boundaries. The recorder sleeps here so the raw capture already
+		// runs on the narration clock.
+		if it.st.Kind == recipe.StepAction && prevKind == recipe.StepSpeech {
+			if _, err := be.DoPause(int64(vis.Pacing.SpeechActionGapMs), "speech-action-gap"); err != nil {
+				return capture.Artifact{}, err
 			}
 		}
+		if it.st.Kind == recipe.StepSpeech && (prevKind == recipe.StepAction || prevKind == recipe.StepWait) {
+			if _, err := be.DoPause(int64(vis.Pacing.ActionSpeechGapMs), "action-speech-gap"); err != nil {
+				return capture.Artifact{}, err
+			}
+		}
+		switch it.st.Kind {
+		case recipe.StepAction:
+			res, err := be.DoAction(*it.st.Action)
+			_ = res
+			if err != nil {
+				return capture.Artifact{}, fmt.Errorf("scene %s action %s: %w", sceneID, it.st.Action.Type, err)
+			}
+			emit("action", it.st.Action.Type)
+		case recipe.StepWait:
+			if _, err := be.DoWait(*it.st.Wait); err != nil {
+				return capture.Artifact{}, err
+			}
+			emit("wait", it.st.Wait.State)
+		case recipe.StepSpeech:
+			ms, ok := speechMs[it.st.SpeechID]
+			if !ok || ms <= 0 {
+				ms = int64(tts.EstimateDuration(it.st.Text, cfg.TTS.Speed)*1000 + 0.5)
+			}
+			if _, err := be.DoSpeech(it.st.SpeechID, ms); err != nil {
+				return capture.Artifact{}, err
+			}
+			emit("speech", it.st.SpeechID)
+		case recipe.StepHold:
+			if _, err := be.DoHold(int64(it.st.HoldMs)); err != nil {
+				return capture.Artifact{}, err
+			}
+			emit("hold", fmt.Sprintf("%dms", it.st.HoldMs))
+		}
+		_ = nextKind
+		prevKind = it.st.Kind
 	}
 	if sc.Screenshot {
 		shotsDir := filepath.Join(r.WorkDir, r.RunID, "screenshots")
@@ -404,6 +467,9 @@ func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName strin
 	}
 	eventsPath := filepath.Join(r.WorkDir, r.RunID, "events-"+sceneID+".jsonl")
 	writeEventsJSONL(eventsPath, art.Events)
+	if _, err := r.ReconcileFinal(); err != nil {
+		return art, fmt.Errorf("scene %s recorded but reconciliation failed: %w", sceneID, err)
+	}
 	return art, nil
 }
 
