@@ -7,7 +7,7 @@ title: "AutoDoc storyboard"
 type: object
 required: [version, meta, scenes]
 properties:
-  version: {type: integer, const: 1}
+  version: {type: integer, enum: [1, 2]}
   meta:
     type: object
     required: [title, language]
@@ -29,6 +29,43 @@ properties:
     properties:
       start_url: {type: string}
       storage_state: {type: string}
+      sequence:
+        type: array
+        items:
+          type: object
+          properties:
+            action:
+              type: object
+              properties:
+                type: {type: string}
+                url: {type: string}
+                value: {type: string}
+                text: {type: string}
+                key: {type: string}
+                secret_ref: {type: string}
+                instant: {type: boolean}
+                no_zoom: {type: boolean}
+                target: {type: object}
+            wait:
+              type: object
+              properties:
+                state: {type: string}
+                url: {type: string}
+                value: {type: string}
+                timeout_ms: {type: integer}
+                settle_ms: {type: integer}
+                compressible: {type: boolean}
+                target: {type: object}
+  visuals:
+    type: object
+    description: "Cinematic overrides; omit for tuned defaults."
+    properties:
+      cursor: {type: object}
+      click: {type: object}
+      typing: {type: object}
+      camera: {type: object}
+      pacing: {type: object}
+      sync: {type: object}
   redact:
     type: object
     properties:

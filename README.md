@@ -132,6 +132,18 @@ Locator preference (enforced by validation): `test_id` → `role` + accessible `
 → `label` → stable attribute → CSS fallback. DOM-position selectors are rejected.
 Full reference: [`docs/storyboard.md`](docs/storyboard.md) · machine schema: [`schemas/storyboard.schema.yml`](schemas/storyboard.schema.yml).
 
+## 🎬 Cinematic mode (default)
+
+Storyboards stay semantic — no coordinates, no zoom levels, no timings.
+The recorder directs each action: a synthetic cursor glides to the target,
+clicks emit a ripple + highlight, typing is progressive and didactic
+(instant for secrets), and the camera eases into close-ups at render time.
+Recording runs on the narration clock (exact WAV windows, monotonic events),
+long loading waits fast-forward instead of freezing, and
+`autodoc validate --sync` reports per-scene drift against 100/150/250 ms
+tolerances. Off-camera `setup.sequence` with `secret_ref: env:NAME` keeps
+credentials out of every artifact.
+
 ## 🗣️ TTS & caching
 
 Two providers in V1 — the setup wizard only offers what actually works:

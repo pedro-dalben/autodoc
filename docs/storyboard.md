@@ -1,15 +1,16 @@
 # Storyboard
 
 `storyboard.yml` is the ONLY hand-authored source. The compiler emits the
-deterministic `_work/recipe.json` (schema version 1); never edit it by hand.
+deterministic `_work/recipe.json` (schema version 2); never edit it by hand.
+Version 1 storyboards keep validating — cinematic defaults apply automatically.
 
 ## Layout
 
 ```yaml
-version: 1
+version: 2
 meta: {title, description, language, resolution, fps}
 config: {base_url, viewport_width, viewport_height}
-setup: {start_url, storage_state, preconditions, expected_states}
+setup: {start_url, storage_state, sequence, preconditions, expected_states}
 redact: {selectors, mask_password_inputs}
 scenes:
   - id: scene-001
@@ -42,6 +43,11 @@ goback, expect, screenshot, scroll`.
 
 `fill`/`type` take `value` (or `text`). `press` takes `key` (default Enter).
 `goto` takes `url` (relative URLs resolve against `config.base_url`).
+`fill` clears then types progressively on camera (30–80 ms/char, default 45);
+`type` appends keystrokes. `instant: true` forces instant fill for fields with
+no didactic value. Password/secret fields always fill instantly and masked.
+Credentials use `secret_ref: env:VAR_NAME` (resolved at record time, never
+stored in artifacts) instead of literal values.
 
 ## Targets (robust first)
 
@@ -60,7 +66,38 @@ selectors (`:nth-child`, positional XPath) must not be used.
 
 `visible, hidden, attached, detached, networkidle, load, url, timeout, settle`,
 with `timeout_ms` (default 15000, max 120000) and `settle_ms` padding.
+`url` waits accept `value:` (or `url:`) as the pattern. Selector waits are
+strict: a timeout fails the record. Long loading waits are compressible
+(`compressible: false` opts out) — the final video fast-forwards dead loading
+(up to 8x, capped at ~2s) instead of freezing; narration is never compressed.
 `hold: {duration_ms}` (max 30000) freezes the visual while silence plays.
+
+## Cinematic recording (default, no configuration needed)
+
+The recorder directs each action like a tutorial author would: a synthetic
+cursor glides to the target (200–450 ms eased motion, parked neutral during
+narration), the target gets a transient highlight, clicks emit a ripple, and
+the camera eases into a close-up of small targets at render time (click
+~1.08x, typing ~1.15x, safe-area clamped, modals never cropped). Bounding
+boxes are discovered at replay time from your semantic targets — storyboards
+never carry coordinates. An optional top-level `visuals:` block overrides
+cursor/click/typing/camera/pacing/sync defaults; omit it for the tuned
+defaults.
+
+## Off-camera setup
+
+```yaml
+setup:
+  start_url: /login
+  sequence:
+    - action: {type: fill, target: {test_id: login-user}, secret_ref: "env:DEMO_USER"}
+    - action: {type: click, target: {test_id: login-btn}}
+    - wait: {state: visible, target: {test_id: home-root}, timeout_ms: 10000}
+```
+
+The sequence runs before capture starts (never recorded) and its storage
+state is cached under `.autodoc/cache/auth/` for reuse. `autodoc auth
+bootstrap` runs it once on demand.
 
 ## Redaction
 
