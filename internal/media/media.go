@@ -129,6 +129,22 @@ func ConcatAudio(wavs []string, out string) error {
 }
 
 func BuildFinalMP4(tl *timeline.Timeline, opts RenderOptions) error {
+	if tl == nil {
+		return fmt.Errorf("no timeline provided; run tts/record first")
+	}
+	// Refuse to silently render solid-color "black video": a missing raw
+	// capture used to produce a plausible-looking MP4 of flat 0x1a1d29.
+	// Failing here is cheaper than publishing a tutorial with no app frames.
+	// (Timelines without scene clips — e.g. audio-only unit-test fixtures —
+	// keep the legacy color fallback.)
+	if len(tl.SceneClips) > 0 {
+		if len(opts.SceneVideo) == 0 {
+			return fmt.Errorf("no scene video found for %d timeline scene clip(s); run `autodoc record` first (refusing solid-color fallback)", len(tl.SceneClips))
+		}
+		if missing := missingScenes(tl, opts.SceneVideo); len(missing) > 0 {
+			return fmt.Errorf("missing raw video for scene(s) %s; run `autodoc record` (or --retake) first (refusing solid-color fallback)", strings.Join(missing, ", "))
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(opts.OutputMP4), 0o755); err != nil {
 		return err
 	}
@@ -319,6 +335,21 @@ func copyFile(src, dst string) error {
 type sceneInput struct {
 	path string
 	dur  float64
+}
+
+func missingScenes(tl *timeline.Timeline, sceneVideo map[string]string) []string {
+	var missing []string
+	seen := map[string]bool{}
+	for _, c := range tl.SceneClips {
+		if seen[c.SceneID] {
+			continue
+		}
+		seen[c.SceneID] = true
+		if _, ok := sceneVideo[c.SceneID]; !ok {
+			missing = append(missing, c.SceneID)
+		}
+	}
+	return missing
 }
 
 func sceneOrder(tl *timeline.Timeline, sceneVideo map[string]string) []sceneInput {
