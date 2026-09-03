@@ -315,6 +315,7 @@ func (b *PlaywrightBackend) DoAction(a storyboard.Action) (ActionResult, error) 
 		if err := b.Navigate(url); err != nil {
 			return ActionResult{}, err
 		}
+		b.record("goto", url)
 		return ActionResult{AtMs: start, ElapsedMs: b.nowMs() - start}, nil
 	case "click":
 		return b.doClick(a, start)
@@ -553,11 +554,13 @@ func (b *PlaywrightBackend) DoSpeech(speechID string, durationMs int64) (ActionR
 
 func (b *PlaywrightBackend) DoHold(durationMs int64) (ActionResult, error) {
 	start := b.nowMs()
-	b.recordV("hold", fmt.Sprintf("%dms", durationMs), visual.VisualEvent{Type: "hold", StartedAtMs: start, DurationMs: durationMs})
+	b.recordV("hold_start", fmt.Sprintf("%dms", durationMs), visual.VisualEvent{Type: "hold", StartedAtMs: start, DurationMs: durationMs})
 	if durationMs > 0 {
 		time.Sleep(time.Duration(durationMs) * time.Millisecond)
 	}
-	return ActionResult{AtMs: start, ElapsedMs: b.nowMs() - start}, nil
+	end := b.nowMs()
+	b.recordV("hold_end", fmt.Sprintf("%dms", durationMs), visual.VisualEvent{Type: "hold", StartedAtMs: start, EndedAtMs: end, DurationMs: end - start})
+	return ActionResult{AtMs: start, ElapsedMs: end - start}, nil
 }
 
 func (b *PlaywrightBackend) DoPause(ms int64, label string) (ActionResult, error) {
@@ -630,7 +633,15 @@ func (b *PlaywrightBackend) DoWait(w storyboard.WaitEvent) (ActionResult, error)
 		if pattern == "" {
 			time.Sleep(600 * time.Millisecond)
 		} else {
-			_ = b.page.WaitForURL(pattern, playwright.PageWaitForURLOptions{Timeout: playwright.Float(timeout)})
+			// Bare paths match by containment ("…/admin/chat/553" matches the
+			// full URL); explicit glob characters opt into full glob matching.
+			if !strings.ContainsAny(pattern, "*?[") {
+				pattern = "**" + pattern + "**"
+			}
+			if err := b.page.WaitForURL(pattern, playwright.PageWaitForURLOptions{Timeout: playwright.Float(timeout)}); err != nil {
+				b.record("wait_timeout", "url "+pattern)
+				return ActionResult{AtMs: start, ElapsedMs: b.nowMs() - start}, fmt.Errorf("wait url %s: %w", pattern, err)
+			}
 		}
 		b.record("wait", "url "+pattern)
 	case "timeout", "settle":

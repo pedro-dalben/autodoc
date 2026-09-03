@@ -372,7 +372,11 @@ func (t *Target) PlaywrightSelector() string {
 	case t.Role != "":
 		return fmt.Sprintf("role=%s", t.Role)
 	case t.Label != "":
-		return fmt.Sprintf("label=%s", t.Label)
+		// No `label=` engine exists; resolve the labeled control through the
+		// label's `for` attribute (standard markup) or the first following
+		// input (sibling-pattern markup), first in document order wins.
+		q := fmt.Sprintf("label[contains(normalize-space(string(.)), %q)]", t.Label)
+		return fmt.Sprintf("xpath=(//input[@id=//%s/@for] | //%s/following::input[1])[1]", q, q)
 	case t.Text != "":
 		return fmt.Sprintf("text=%s", t.Text)
 	default:

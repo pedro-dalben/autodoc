@@ -134,20 +134,36 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 		sceneStart := out
 		events := sceneEvents[sc.ID]
 		t0 := videoZero(events)
-		var interactions, waits, holds, pads []ActualEvent
+		byType := map[string][]ActualEvent{}
+		var waits []ActualEvent
+		var holdWins [][2]float64
+		var pendingHold float64
+		havePendingHold := false
+		var navTimes []float64
 		var speechVideo [][2]float64
 		speechWin := map[string][2]float64{}
 		for _, e := range events {
 			v := float64(e.AtMs-t0) / 1000.0
 			switch e.Kind {
 			case "visual":
-				interactions = append(interactions, e)
+				if e.Visual != nil {
+					byType[e.Visual.Interaction] = append(byType[e.Visual.Interaction], e)
+				}
 			case "wait_span":
 				waits = append(waits, e)
-			case "hold":
-				holds = append(holds, e)
-			case "pad":
-				pads = append(pads, e)
+			case "hold_start":
+				pendingHold = v
+				havePendingHold = true
+			case "hold_end":
+				if havePendingHold {
+					holdWins = append(holdWins, [2]float64{pendingHold, v})
+					havePendingHold = false
+				} else if e.Visual != nil && e.Visual.DurationMs > 0 {
+					d := float64(e.Visual.DurationMs) / 1000.0
+					holdWins = append(holdWins, [2]float64{v - d, v})
+				}
+			case "goto":
+				navTimes = append(navTimes, v)
 			case "speech_start":
 				if e.Visual != nil {
 					speechWin[e.Label] = [2]float64{v, v + float64(e.Visual.DurationMs)/1000.0}
@@ -163,9 +179,15 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 				}
 			}
 		}
-		ii, wi, hi, pi := 0, 0, 0, 0
+		wi, hi, ni := 0, 0, 0
+		typeCursor := map[string]int{}
 		sceneSegs := plannedSegsFromRecipe(&sc, segByID)
-		for _, ps := range sceneSegs {
+		waitStarts := make([]float64, 0, len(waits))
+		for _, we := range waits {
+			ws, _ := spanWindow(we, t0)
+			waitStarts = append(waitStarts, ws)
+		}
+		for stepIdx, ps := range sceneSegs {
 			switch ps.kind {
 			case "speech":
 				w, ok := speechWin[ps.speechID]
@@ -199,10 +221,31 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 				var zoom float64 = 1
 				var nb *visual.BBox
 				label := ps.label
-				if ii < len(interactions) {
-					e := interactions[ii]
-					ii++
+				actionAt := -1.0
+				if ps.actionType == "goto" && ni < len(navTimes) {
+					// Scene navigation claims its own window; never consumes
+					// an interaction event. Trimmed at the next step so the
+					// following wait keeps its own footage.
+					vw0 = navTimes[ni]
+					ni++
+					vw1 = nextEventAfter(events, t0, vw0)
+					if stepIdx+1 < len(sceneSegs) && sceneSegs[stepIdx+1].kind == "wait" && wi < len(waitStarts) && waitStarts[wi] > vw0+0.05 {
+						vw1 = waitStarts[wi]
+					}
+					if vw1 <= vw0+0.05 {
+						vw1 = vw0 + 0.5
+					}
+					est = false
+					actionAt = vw0
+				} else if q := byType[ps.actionType]; typeCursor[ps.actionType] < len(q) {
+					e := q[typeCursor[ps.actionType]]
+					typeCursor[ps.actionType]++
 					vw0, vw1, zoom, nb, label, est = interactionWindow(e, t0)
+					actionAt = actionAtS(e, t0)
+				} else if ps.actionType == "goto" || ps.actionType == "expect" || ps.actionType == "screenshot" || ps.actionType == "scroll" || ps.actionType == "reload" || ps.actionType == "goback" {
+					vw0 = out - sceneStart + videoOffsetGuess(events, t0)
+					vw1 = vw0 + 0.5
+					est = true
 				} else {
 					vw0 = out - sceneStart + videoOffsetGuess(events, t0)
 					vw1 = vw0 + 0.8
@@ -212,9 +255,8 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 					dur = 0.8
 					vw1 = vw0 + dur
 				}
-				actionAt := vw0 + dur/2
-				if ii > 0 && ii <= len(interactions) {
-					actionAt = actionAtS(interactions[ii-1], t0)
+				if actionAt < 0 {
+					actionAt = vw0 + dur/2
 				}
 				ft.Segments = append(ft.Segments, AVSegment{
 					SceneID: sc.ID, BeatID: ps.beat, Kind: "action", Label: label,
@@ -261,13 +303,9 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 			case "hold":
 				var vw0, vw1 float64
 				est := true
-				if hi < len(holds) {
-					vw0, vw1 = spanWindow(holds[hi], t0)
+				if hi < len(holdWins) {
+					vw0, vw1 = holdWins[hi][0], holdWins[hi][1]
 					hi++
-					est = false
-				} else if pi < len(pads) {
-					vw0, vw1 = spanWindow(pads[pi], t0)
-					pi++
 					est = false
 				} else {
 					vw0 = out - sceneStart + videoOffsetGuess(events, t0)
@@ -310,6 +348,7 @@ type plannedSeg struct {
 	kind         string
 	beat         string
 	label        string
+	actionType   string
 	speechID     string
 	text         string
 	wav          string
@@ -342,7 +381,7 @@ func plannedSegsFromRecipe(sc *recipe.ScenePlan, segByID map[string]Segment) []p
 				if st.Action.Target != nil {
 					label += " " + st.Action.Target.Describe()
 				}
-				out = append(out, plannedSeg{kind: "action", beat: b.ID, label: label, start: -1})
+				out = append(out, plannedSeg{kind: "action", beat: b.ID, label: label, actionType: st.Action.Type, start: -1})
 			case recipe.StepWait:
 				dur := float64(st.Wait.SettleMs) / 1000.0
 				if st.Wait.SettleMs == 0 {
@@ -355,6 +394,17 @@ func plannedSegsFromRecipe(sc *recipe.ScenePlan, segByID map[string]Segment) []p
 		}
 	}
 	return out
+}
+
+func nextEventAfter(events []ActualEvent, t0 int64, after float64) float64 {
+	best := after + 30
+	for _, e := range events {
+		v := float64(e.AtMs-t0) / 1000.0
+		if v > after+0.01 && v < best {
+			best = v
+		}
+	}
+	return best
 }
 
 func videoZero(events []ActualEvent) int64 {

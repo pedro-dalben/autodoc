@@ -65,8 +65,9 @@ func TestReconcilePacedCapture(t *testing.T) {
 			{Kind: "wait_span", Label: "timeout", AtMs: 5700, Visual: ve("wait", 4200, 5700)},
 			{Kind: "speech_start", Label: "s1-b1-speech-002", AtMs: 6150, Visual: ve("speech", 6150, 10150)},
 			{Kind: "speech_end", Label: "s1-b1-speech-002", AtMs: 10150, Visual: ve("speech", 6150, 10150)},
-			{Kind: "visual", Label: "fill", AtMs: 11200, Visual: &visual.VisualEvent{Type: "interaction", Interaction: "type", StartedAtMs: 10400, FocusAtMs: 10600, ActionAtMs: 11000, EndedAtMs: 11200, Zoom: 1.15, TypingChars: 3, Progressive: true}},
-			{Kind: "hold", Label: "500ms", AtMs: 11700, Visual: ve("hold", 11200, 11700)},
+			{Kind: "visual", Label: "fill", AtMs: 11200, Visual: &visual.VisualEvent{Type: "interaction", Interaction: "fill", StartedAtMs: 10400, FocusAtMs: 10600, ActionAtMs: 11000, EndedAtMs: 11200, Zoom: 1.15, TypingChars: 3, Progressive: true}},
+			{Kind: "hold_start", Label: "500ms", AtMs: 11200, Visual: &visual.VisualEvent{Type: "hold", StartedAtMs: 11200, DurationMs: 500}},
+			{Kind: "hold_end", Label: "500ms", AtMs: 11700, Visual: &visual.VisualEvent{Type: "hold", StartedAtMs: 11200, EndedAtMs: 11700, DurationMs: 500}},
 		},
 	}
 	ft := timeline.Reconcile(planned, testRecipe(), events, map[string]float64{"s1": 12.0}, timeline.DefaultReconcileOpts())
@@ -148,7 +149,8 @@ func TestOverlapFailsSync(t *testing.T) {
 			{Kind: "speech_start", Label: "s1-b1-speech-002", AtMs: 3950, Visual: ve("speech", 3950, 7950)},
 			{Kind: "speech_end", Label: "s1-b1-speech-002", AtMs: 7950, Visual: ve("speech", 3950, 7950)},
 			{Kind: "visual", Label: "fill", AtMs: 8750, Visual: &visual.VisualEvent{Type: "interaction", StartedAtMs: 8200, ActionAtMs: 8500, EndedAtMs: 8750}},
-			{Kind: "hold", Label: "500ms", AtMs: 9250, Visual: ve("hold", 8750, 9250)},
+			{Kind: "hold_start", Label: "500ms", AtMs: 8750, Visual: &visual.VisualEvent{Type: "hold", StartedAtMs: 8750, DurationMs: 500}},
+			{Kind: "hold_end", Label: "500ms", AtMs: 9250, Visual: &visual.VisualEvent{Type: "hold", StartedAtMs: 8750, EndedAtMs: 9250, DurationMs: 500}},
 		},
 	}
 	ft := timeline.Reconcile(planned, testRecipe(), events, map[string]float64{"s1": 9.5}, timeline.DefaultReconcileOpts())

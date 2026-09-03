@@ -6,11 +6,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/pedro-dalben/autodoc/internal/capture"
 	"github.com/pedro-dalben/autodoc/internal/storyboard"
 	"github.com/pedro-dalben/autodoc/internal/visual"
 )
+
+// setupCacheTTL bounds setup-state reuse so idle-locked apps (PIN screens,
+// inactivity timeouts) never see a stale cookie. Fresh login costs seconds;
+// a stale session costs the whole record.
+const setupCacheTTL = 5 * time.Minute
 
 // setupCachePath keys the off-camera auth state by sequence content so a
 // future record reuses a still-valid login without replaying credentials.
@@ -59,8 +65,13 @@ func (r *Run) ensureSetupState(headless bool) (string, error) {
 		}
 		return "", nil
 	}
+	// Cached sessions go stale: apps with idle locks (PIN, timeouts) reject
+	// old cookies. Refresh well inside typical idle windows.
 	if p := r.setupCachePath(); fileExists(p) {
-		return p, nil
+		if st, err := os.Stat(p); err == nil && time.Since(st.ModTime()) < setupCacheTTL {
+			return p, nil
+		}
+		_ = os.Remove(p)
 	}
 	return r.runSetupOffCamera(headless)
 }
