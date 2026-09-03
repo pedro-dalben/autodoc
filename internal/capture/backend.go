@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pedro-dalben/autodoc/internal/storyboard"
+	"github.com/pedro-dalben/autodoc/internal/visual"
 )
 
 type StartOptions struct {
@@ -16,11 +17,13 @@ type StartOptions struct {
 	ProfileDir   string
 	VideoDir     string
 	Redact       storyboard.Redact
+	Visuals      visual.Config
 }
 
 type ActionResult struct {
-	AtMs int64
-	Note string
+	AtMs      int64
+	ElapsedMs int64
+	Note      string
 }
 
 type Chapter struct {
@@ -34,6 +37,15 @@ type CaptureBackend interface {
 	ApplyRedaction(selectors []string, maskPasswords bool) error
 	DoAction(a storyboard.Action) (ActionResult, error)
 	DoWait(w storyboard.WaitEvent) (ActionResult, error)
+	// DoSpeech reserves the exact narration window in the capture so the
+	// raw video already runs on the narration clock (monotonic events).
+	DoSpeech(speechID string, durationMs int64) (ActionResult, error)
+	// DoHold reserves a hold window in the capture.
+	DoHold(durationMs int64) (ActionResult, error)
+	// DoPause inserts a small intentional pacing gap (narration padding).
+	DoPause(ms int64, label string) (ActionResult, error)
+	// SaveStorageState snapshots cookies/localStorage for setup reuse.
+	SaveStorageState(path string) error
 	Screenshot(path string) error
 	ShowAction(label string)
 	ShowChapter(title string)

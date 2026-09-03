@@ -34,7 +34,22 @@ func LoadFile(path string) (*Storyboard, error) {
 
 func (s *Storyboard) SourceHash() string {
 	h := sha256.New()
-	fmt.Fprintf(h, "v1|%s|%s|%s|%dx%d|%s|", s.Meta.Title, s.Meta.Language, s.Config.BaseURL, s.Config.ViewportW, s.Config.ViewportH, s.Setup.StartURL)
+	fmt.Fprintf(h, "v2|%d|%s|%s|%s|%dx%d|%s|", s.Version, s.Meta.Title, s.Meta.Language, s.Config.BaseURL, s.Config.ViewportW, s.Config.ViewportH, s.Setup.StartURL)
+	if s.Visuals != nil {
+		fmt.Fprintf(h, "visuals:%+v|", *s.Visuals)
+	}
+	for _, st := range s.Setup.Sequence {
+		switch {
+		case st.Action != nil:
+			t := ""
+			if st.Action.Target != nil {
+				t = st.Action.Target.PlaywrightSelector()
+			}
+			fmt.Fprintf(h, "setup-action:%s|%s|%s|secret:%t|", st.Action.Type, t, st.Action.URL, st.Action.SecretRef != "")
+		case st.Wait != nil:
+			fmt.Fprintf(h, "setup-wait:%s|%s|%d|%d|", st.Wait.State, st.Wait.URL, st.Wait.TimeoutMs, st.Wait.SettleMs)
+		}
+	}
 	for _, sc := range s.Scenes {
 		fmt.Fprintf(h, "scene:%s|%s|", sc.ID, sc.URL)
 		for _, b := range sc.Beats {
@@ -48,9 +63,9 @@ func (s *Storyboard) SourceHash() string {
 					if ev.Action.Target != nil {
 						t = ev.Action.Target.PlaywrightSelector()
 					}
-					fmt.Fprintf(h, "action:%s|%s|%s|%s|%s|%s|", ev.Action.Type, t, ev.Action.URL, ev.Action.Text, ev.Action.Value, ev.Action.Key)
+					fmt.Fprintf(h, "action:%s|%s|%s|%s|%s|%s|secret:%t|", ev.Action.Type, t, ev.Action.URL, ev.Action.Text, ev.Action.Value, ev.Action.Key, ev.Action.SecretRef != "")
 				case ev.Wait != nil:
-					fmt.Fprintf(h, "wait:%s|%s|%d|%d|", ev.Wait.State, ev.Wait.URL, ev.Wait.TimeoutMs, ev.Wait.SettleMs)
+					fmt.Fprintf(h, "wait:%s|%s|%s|%d|%d|", ev.Wait.State, ev.Wait.URL, ev.Wait.Value, ev.Wait.TimeoutMs, ev.Wait.SettleMs)
 				case ev.Hold != nil:
 					fmt.Fprintf(h, "hold:%d|", ev.Hold.DurationMs)
 				}
