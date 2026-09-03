@@ -10,9 +10,12 @@ Division of labor — be explicit about it:
 ## 1. Init
 
 ```bash
-autodoc init
-autodoc doctor
+autodoc init --global # once per machine: TTS/voice/browser defaults
+autodoc init          # once per project: ./autodoc.toml + storyboard.yml
+autodoc doctor        # reports config source: project | global
 ```
+
+Projects without `./autodoc.toml` inherit the global file automatically.
 
 ## 2. Authenticate (off-camera, never recorded)
 

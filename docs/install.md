@@ -18,13 +18,29 @@ sudo install -m755 autodoc /usr/local/bin/autodoc
 ## Setup
 
 ```bash
-autodoc init
+autodoc init          # project: writes ./autodoc.toml + example storyboard.yml
+autodoc init --global # machine: writes ~/.config/autodoc/autodoc.toml (no storyboard)
 ```
 
-`init` probes coding agents (Codex, Claude Code, Antigravity, Gemini CLI;
-Cursor best-effort), installs the canonical skill + MCP entries it owns,
-checks TTS/FFmpeg/browser, and writes `autodoc.toml` + example `storyboard.yml`.
-Re-running `init` is idempotent (zero diff).
+`init` probes coding agents (Codex, Claude Code, Antigravity, Gemini CLI,
+OpenCode; Cursor best-effort), installs the canonical skill + MCP entries it owns,
+checks TTS/FFmpeg/browser, and writes config + example `storyboard.yml`
+(project mode only). Re-running `init` is idempotent (zero diff).
+
+## Config resolution
+
+Every command resolves config as **project → global → defaults**:
+
+1. `./autodoc.toml` walking upward from the cwd (project root);
+2. `~/.config/autodoc/autodoc.toml` (`$AUTODOC_CONFIG_HOME`, else
+   `$XDG_CONFIG_HOME/autodoc/`);
+3. built-in defaults (used only when neither file exists).
+
+A project file always wins; delete it (or run outside the project) to fall
+back to global. `doctor` reports which source is active (`project`/`global`).
+Only settings that differ per machine belong in global (TTS endpoint/voice,
+browser profile); storyboards always live in the project. `init --global`
+never writes `storyboard.yml`.
 
 ## Playwright browsers
 

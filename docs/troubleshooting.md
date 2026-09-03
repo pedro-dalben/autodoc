@@ -2,7 +2,9 @@
 
 ## `autodoc.toml not found`
 
-Run `autodoc init` in the project root first.
+Run `autodoc init` in the project root first — or `autodoc init --global`
+once per machine so projects without `./autodoc.toml` inherit the global
+`~/.config/autodoc/autodoc.toml`. `doctor` shows the active source.
 
 ## `ffmpeg not found` / missing `libx264`/`aac`
 

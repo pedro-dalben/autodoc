@@ -72,9 +72,11 @@ autodoc doctor        # full diagnostics (add --json for machines)
 autodoc browser install   # Playwright browser assets (separate from the Go binary!)
 ```
 
-`autodoc init` detects **Codex, Claude Code, Antigravity, Gemini CLI** (Cursor best-effort),
+`autodoc init` detects **Codex, Claude Code, Antigravity, Gemini CLI, OpenCode** (Cursor best-effort),
 installs the canonical skill + MCP entries it owns, and writes `autodoc.toml` plus an
-example `storyboard.yml`. Re-running it is a zero-diff no-op.
+example `storyboard.yml` (`autodoc init --global` writes the machine-wide
+`~/.config/autodoc/autodoc.toml` instead). Every command resolves config as
+project → global → defaults. Re-running it is a zero-diff no-op.
 
 ### Produce a tutorial (the happy path)
 
@@ -170,8 +172,9 @@ Full policy: [`docs/security.md`](docs/security.md) · [`SECURITY.md`](SECURITY.
 |---------|-------|-----|-------|
 | Codex | `~/.codex/skills/autodoc/SKILL.md` | config entry | rules block in `AGENTS.md` |
 | Claude Code | `~/.claude/skills/autodoc/SKILL.md` | `mcpServers.autodoc` (owned-flag) | rules block in `CLAUDE.md` |
-| Antigravity | `~/.config/antigravity/skills/autodoc/SKILL.md` | `mcp.json` | real path probes, incl. IDE install marker |
+| Antigravity | `~/.config/antigravity/skills/autodoc/SKILL.md` | `mcpServers.autodoc` in `~/.gemini/config/mcp_config.json` | real path probes, incl. IDE install marker |
 | Gemini CLI | `~/.gemini/skills/autodoc/SKILL.md` | settings merge | rules block in `GEMINI.md` |
+| OpenCode | `~/.config/opencode/skills/autodoc/SKILL.md` | `mcp.servers.autodoc` local | owned-flag merge |
 | Cursor | `~/.cursor/skills/autodoc/SKILL.md` | — | best-effort |
 
 All installs are **idempotent** (re-run = zero diff) and **ownership-safe**
@@ -245,7 +248,7 @@ docs/                  # user docs + harness pages + shipped example bundle
 - [Install](docs/install.md) · [Getting started](docs/getting-started.md) · [Storyboard](docs/storyboard.md)
 - [TTS](docs/tts.md) · [Local TTS](docs/local-tts.md) · [Security](docs/security.md)
 - [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md) · [Homebrew](docs/homebrew.md)
-- Harnesses: [Codex](docs/harnesses/codex.md) · [Claude Code](docs/harnesses/claude.md) · [Antigravity](docs/harnesses/antigravity.md) · [Gemini CLI](docs/harnesses/gemini.md)
+- Harnesses: [Codex](docs/harnesses/codex.md) · [Claude Code](docs/harnesses/claude.md) · [Antigravity](docs/harnesses/antigravity.md) · [Gemini CLI](docs/harnesses/gemini.md) · [OpenCode](docs/harnesses/opencode.md)
 - Open source: [LICENSE](LICENSE) · [NOTICE](NOTICE) · [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) · [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md) · [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
 
 ## 📦 Distribution
