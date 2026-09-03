@@ -607,7 +607,11 @@ func (b *PlaywrightBackend) DoWait(w storyboard.WaitEvent) (ActionResult, error)
 		case "detached":
 			st = *playwright.WaitForSelectorStateDetached
 		}
-		_, _ = b.page.WaitForSelector(sel, playwright.PageWaitForSelectorOptions{State: &st, Timeout: playwright.Float(timeout)})
+		_, err := b.page.WaitForSelector(sel, playwright.PageWaitForSelectorOptions{State: &st, Timeout: playwright.Float(timeout)})
+		if err != nil {
+			b.record("wait_timeout", state+" "+sel)
+			return ActionResult{AtMs: start, ElapsedMs: b.nowMs() - start}, fmt.Errorf("wait %s %s: %w", state, sel, err)
+		}
 		b.record("wait", state+" "+sel)
 	case "load":
 		_ = b.page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{Timeout: playwright.Float(timeout)})

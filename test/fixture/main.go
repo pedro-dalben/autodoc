@@ -156,7 +156,7 @@ label{display:block;margin:8px 0 4px}
 <dialog id="modal" role="dialog" aria-label="Novo material">
 <h3>Novo material</h3>
 <div class="error" id="formError" role="alert"></div>
-<div class="success" id="formSuccess" role="status"></div>
+<div class="success" id="formSuccess" role="status" data-testid="form-success"></div>
 <label for="fName">Nome</label><input id="fName" data-testid="material-name" placeholder="Ex: Areia lavada">
 <label for="fCat">Categoria</label>
 <select id="fCat" data-testid="material-category"><option>Construção</option><option>Elétrica</option><option>Hidráulica</option></select>

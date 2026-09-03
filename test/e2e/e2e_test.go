@@ -218,10 +218,21 @@ func assertBundle(t *testing.T, bundle string) {
 	if len(tl.Segments) == 0 {
 		t.Fatal("timeline has no segments")
 	}
+	// Paced capture includes real action/cue durations, so the reconciled
+	// final timeline (not the speech-only plan) is the duration authority.
+	expectTotal := tl.TotalS
+	if finalData, err := os.ReadFile(filepath.Join(bundle, "final_timeline.json")); err == nil {
+		var ft struct {
+			TotalS float64 `json:"total_s"`
+		}
+		if json.Unmarshal(finalData, &ft) == nil && ft.TotalS > 0 {
+			expectTotal = ft.TotalS
+		}
+	}
 	var dur float64
 	fmt.Sscanf(fj.Format.Duration, "%f", &dur)
-	if diff := dur - tl.TotalS; diff > 1.5 || diff < -1.5 {
-		t.Fatalf("mp4 duration %.2f vs timeline %.2f", dur, tl.TotalS)
+	if diff := dur - expectTotal; diff > 1.0 || diff < -1.0 {
+		t.Fatalf("mp4 duration %.2f vs timeline %.2f", dur, expectTotal)
 	}
 	srt, _ := os.ReadFile(filepath.Join(bundle, "subtitles.srt"))
 	if !strings.Contains(string(srt), "-->") {

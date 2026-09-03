@@ -45,6 +45,7 @@ type AVSegment struct {
 	VideoStartS  float64      `json:"video_start_s"`
 	VideoEndS    float64      `json:"video_end_s"`
 	Speed        float64      `json:"speed"`
+	ActionAtS    float64      `json:"action_at_s,omitempty"`
 	WavPath      string       `json:"wav_path,omitempty"`
 	Zoom         float64      `json:"zoom,omitempty"`
 	NormBBox     *visual.BBox `json:"norm_bbox,omitempty"`
@@ -211,10 +212,14 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 					dur = 0.8
 					vw1 = vw0 + dur
 				}
+				actionAt := vw0 + dur/2
+				if ii > 0 && ii <= len(interactions) {
+					actionAt = actionAtS(interactions[ii-1], t0)
+				}
 				ft.Segments = append(ft.Segments, AVSegment{
 					SceneID: sc.ID, BeatID: ps.beat, Kind: "action", Label: label,
 					StartS: out, DurS: dur, VideoStartS: vw0, VideoEndS: vw1,
-					Speed: 1, Zoom: zoom, NormBBox: nb, Estimated: est,
+					Speed: 1, Zoom: zoom, NormBBox: nb, Estimated: est, ActionAtS: actionAt,
 				})
 				if !est {
 					overlap := rangeOverlap(vw0, vw1, speechVideo)
@@ -412,6 +417,13 @@ func interactionWindow(e ActualEvent, t0 int64) (v0, v1, zoom float64, nb *visua
 		zoom = 1
 	}
 	return v0, v1, zoom, ve.NormBBox, label, false
+}
+
+func actionAtS(e ActualEvent, t0 int64) float64 {
+	if e.Visual != nil && e.Visual.ActionAtMs > 0 {
+		return float64(e.Visual.ActionAtMs-t0) / 1000.0
+	}
+	return float64(e.AtMs-t0) / 1000.0
 }
 
 func waitOutput(actual, planned float64, compressible bool, opts ReconcileOpts) (out, speed float64, compressed bool) {

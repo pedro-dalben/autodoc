@@ -795,6 +795,10 @@ func printSyncReport(out interface{ Write([]byte) (int, error) }, ft *timeline.F
 		if !it.Pass {
 			status = "FAIL"
 		}
+		if it.Kind == "coverage" {
+			fmt.Fprintf(out, "%-42s %4.0f estimated  %s\n", it.Scope, it.DriftMs, status)
+			continue
+		}
 		fmt.Fprintf(out, "%-42s %+7.0fms  %s\n", it.Scope, it.DriftMs, status)
 	}
 	fmt.Fprintln(out, "------------------------------")
