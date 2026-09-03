@@ -1,0 +1,76 @@
+version: 1
+meta:
+  title: "Gerenciando materiais"
+  description: "Tutorial fixture: listagem e cadastro de materiais"
+  language: "pt-BR"
+  resolution: "1280x720"
+  fps: 30
+config:
+  base_url: "http://localhost:8099"
+  viewport_width: 1280
+  viewport_height: 720
+setup:
+  start_url: "/login"
+  expected_states:
+    - description: "login form visible"
+      state: visible
+      timeout_ms: 8000
+redact:
+  selectors:
+    - "[data-testid=material-secret]"
+  mask_password_inputs: true
+scenes:
+  - id: scene-001
+    title: "Acesso e listagem de materiais"
+    url: "/login"
+    screenshot: true
+    beats:
+      - id: beat-01
+        sequence:
+          - speech:
+              text: "Acesse com o usuário de demonstração."
+          - action:
+              type: click
+              target:
+                test_id: login-btn
+          - wait:
+              state: visible
+              target:
+                test_id: new-material-btn
+              timeout_ms: 10000
+          - speech:
+              text: "Nesta tela encontramos os materiais cadastrados."
+          - hold:
+              duration_ms: 600
+  - id: scene-002
+    title: "Cadastrando material"
+    url: "/login"
+    beats:
+      - id: beat-01
+        sequence:
+          - speech:
+              text: "Acesse novamente com o usuário de demonstração."
+          - action:
+              type: click
+              target:
+                test_id: login-btn
+          - wait:
+              state: visible
+              target:
+                test_id: new-material-btn
+              timeout_ms: 10000
+          - speech:
+              text: "Clique em Novo para cadastrar um material."
+          - action:
+              type: click
+              target:
+                test_id: new-material-btn
+          - wait:
+              state: visible
+              target:
+                role: dialog
+              timeout_ms: 10000
+          - speech:
+              text: "Preencha os campos e salve para concluir."
+          - hold:
+              duration_ms: 600
