@@ -10,6 +10,20 @@ import (
 	"github.com/pedro-dalben/autodoc/internal/visual"
 )
 
+// ReadableResultHold returns a deterministic reading hold. Result text is the
+// evidence available before rendering; richer real UI evidence can raise this
+// value later without ever shortening below the configured safety floor.
+func ReadableResultHold(result string, cfg visual.CinematicConfig) int {
+	hold := cfg.Results.MinHoldMs + len([]rune(result))*28
+	if hold < cfg.Results.MinHoldMs {
+		return cfg.Results.MinHoldMs
+	}
+	if hold > 2600 {
+		return 2600
+	}
+	return hold
+}
+
 // WaitClass classifies dead time for the automatic editor.
 type WaitClass string
 
@@ -174,7 +188,7 @@ func BuildEditPlan(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.Cine
 			}
 			se.Clips = append(se.Clips, Clip{SceneID: sg.SceneID, BeatID: b.BeatID, Type: ClipAction, DurationMs: int(sg.DurS * 1000), Label: sg.Label})
 			if b.NeedsConfirmation && cfg.ConfirmationOn() {
-				hold := cfg.Results.MinHoldMs
+				hold := ReadableResultHold(b.ExpectedResult, cfg)
 				se.Clips = append(se.Clips, Clip{SceneID: sg.SceneID, BeatID: b.BeatID, Type: ClipResult, HoldMs: hold, DurationMs: hold, Strategy: EditKeep, Label: "result:" + b.ExpectedResult})
 			}
 		case "wait":
@@ -217,7 +231,7 @@ func EnsureResultHolds(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.
 	need := func(sg timeline.AVSegment) (int, bool) {
 		b := beatForAction(idx, sg.SceneID, sg.BeatID, sg.Label)
 		if b.NeedsConfirmation {
-			return cfg.Results.MinHoldMs, true
+			return ReadableResultHold(b.ExpectedResult, cfg), true
 		}
 		return 0, false
 	}

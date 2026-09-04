@@ -115,6 +115,28 @@ func TestAttentionOverrides(t *testing.T) {
 	}
 }
 
+func TestAttentionBudgetDemotesRepeatedInterventions(t *testing.T) {
+	cfg := testCfg()
+	beats := make([]BeatPlan, 5)
+	for i := range beats {
+		beats[i] = BeatPlan{Index: i, SceneID: "s", BeatID: string(rune('a' + i)), Type: SceneClickAction, NeedsAnticipation: true}
+	}
+	p := DirectAttention(beats, cfg)
+	if p.Decisions[4].Strategy != AttFocus || p.Decisions[4].Reason != "attention-budget" {
+		t.Fatalf("last repeated intervention should be demoted: %+v", p.Decisions[4])
+	}
+}
+
+func TestReadableResultHoldScalesAndCaps(t *testing.T) {
+	cfg := testCfg()
+	if got := ReadableResultHold("ok", cfg); got <= cfg.Results.MinHoldMs {
+		t.Fatalf("short result should add reading time: %d", got)
+	}
+	if got := ReadableResultHold(string(make([]rune, 500)), cfg); got != 2600 {
+		t.Fatalf("long result must cap: %d", got)
+	}
+}
+
 func nb(x, y, w, h float64) *visual.BBox { return &visual.BBox{X: x, Y: y, Width: w, Height: h} }
 
 func TestCameraContinuityAndSafety(t *testing.T) {

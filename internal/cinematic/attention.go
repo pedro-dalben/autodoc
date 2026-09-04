@@ -112,7 +112,39 @@ func DirectAttention(beats []BeatPlan, cfg visual.CinematicConfig) *AttentionPla
 		}
 		p.Decisions = append(p.Decisions, dec)
 	}
+	applyAttentionBudget(p, beats)
 	return p
+}
+
+// applyAttentionBudget prevents the repeated zoom/spotlight choreography that
+// makes a deterministic tutorial feel mechanical. Explicit storyboard
+// overrides stay authoritative; ordinary interaction beats get at most about
+// 60% visual interventions per scene, with one orientation allowance.
+func applyAttentionBudget(p *AttentionPlan, beats []BeatPlan) {
+	actions := map[string]int{}
+	for _, b := range beats {
+		if b.NeedsAnticipation {
+			actions[b.SceneID]++
+		}
+	}
+	limit := map[string]int{}
+	for scene, n := range actions {
+		limit[scene] = int(math.Ceil(float64(n)*0.6)) + 1
+	}
+	used := map[string]int{}
+	for i := range p.Decisions {
+		d := &p.Decisions[i]
+		if d.Strategy != AttSpotlight && d.Strategy != AttFollow {
+			continue
+		}
+		if d.BeatIndex >= 0 && d.BeatIndex < len(beats) && beats[d.BeatIndex].AttentionOverride != "" {
+			continue
+		}
+		used[d.SceneID]++
+		if used[d.SceneID] > limit[d.SceneID] {
+			d.Strategy, d.Spotlight, d.Anticipate, d.Reason = AttFocus, false, false, "attention-budget"
+		}
+	}
 }
 
 func nextNeedsContext(beats []BeatPlan, i int) bool {
