@@ -260,17 +260,11 @@ func EnsureResultHolds(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.
 	if added > 0 {
 		// Reflow StartS and totals (speech positions shift deterministically).
 		t := 0.0
-		audio := 0.0
 		for i := range ft.Segments {
 			ft.Segments[i].StartS = t
 			t += ft.Segments[i].DurS
 		}
-		for i := range ft.Speeches {
-			// Speeches follow the same reflow via segment order.
-			_ = i
-		}
 		ft.TotalS = t
-		_ = audio
 		// Reflow speech extents to match their AV segments.
 		si := 0
 		for _, sg := range ft.Segments {
@@ -295,8 +289,6 @@ func EnsureResultHolds(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.
 			ft.SceneClips[i].StartS, ft.SceneClips[i].EndS, ft.SceneClips[i].Duration = s0, s1, s1-s0
 		}
 	}
-	plan := 0
-	_ = plan
 	return added
 }
 

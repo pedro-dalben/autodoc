@@ -117,7 +117,7 @@ func (s *Server) dispatch(out *bufio.Writer, req Request) {
 		}
 		res, err := h(p.Arguments)
 		if err != nil {
-			fail(-32000, err.Error())
+			fail(-32000, compactErr(err.Error()))
 			return
 		}
 		ok(map[string]any{"content": []any{map[string]any{"type": "text", "text": toText(res)}}})
@@ -143,4 +143,15 @@ func StrArg(args map[string]any, key, def string) string {
 		return v
 	}
 	return def
+}
+
+// compactErr bounds error text sent to the agent. Tool failures often wrap
+// verbose backend output (ffmpeg logs, Playwright stacks); the exit cause is
+// in the first bytes, so truncate instead of forwarding kilobytes.
+func compactErr(s string) string {
+	const maxErrBytes = 800
+	if len(s) <= maxErrBytes {
+		return s
+	}
+	return s[:maxErrBytes] + "\n…(truncated)"
 }

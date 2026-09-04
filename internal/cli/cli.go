@@ -98,7 +98,6 @@ func newInitCmd() *cobra.Command {
 		ttsModel       string
 		ttsVoice       string
 		harness        []string
-		skipBrowser    bool
 	}
 	cmd := &cobra.Command{
 		Use:   "init",
@@ -247,7 +246,6 @@ func newInitCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.ttsModel, "tts-model", "", "tts model")
 	cmd.Flags().StringVar(&opts.ttsVoice, "tts-voice", "", "tts voice")
 	cmd.Flags().StringArrayVar(&opts.harness, "harness", nil, "harness to configure (repeatable)")
-	cmd.Flags().BoolVar(&opts.skipBrowser, "skip-browser", false, "skip browser check")
 	return cmd
 }
 
@@ -398,9 +396,7 @@ func newCompileCmd() *cobra.Command {
 }
 
 func newTTSCmd() *cobra.Command {
-	var sbPath, backend string
-	var headless bool
-	_ = headless
+	var sbPath string
 	cmd := &cobra.Command{
 		Use:   "tts",
 		Short: "Synthesize TTS segments (cached per speech segment)",
@@ -416,7 +412,6 @@ func newTTSCmd() *cobra.Command {
 			if err := run.Compile(); err != nil {
 				return err
 			}
-			_ = backend
 			prov, err := ttsProviderFromConfig(cfg)
 			if err != nil {
 				return err
@@ -437,7 +432,6 @@ func newTTSCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
-	cmd.Flags().StringVar(&backend, "backend", "", "reserved")
 	return cmd
 }
 

@@ -119,7 +119,7 @@ func RenderCinematic(ft *timeline.FinalTimeline, opts CinematicOptions) error {
 	)
 	out, err := runFFmpeg(args...)
 	if err != nil {
-		return fmt.Errorf("ffmpeg cinematic render: %w\n%s", err, out)
+		return fmt.Errorf("ffmpeg cinematic render: %w\n%s", err, tailLines([]byte(out), 20))
 	}
 	if opts.DebugCuesPath != "" {
 		_ = WriteCuesDebug(ft, opts.DebugCuesPath)

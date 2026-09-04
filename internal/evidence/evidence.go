@@ -333,17 +333,19 @@ func (e Element) kind() string {
 	return e.Tag
 }
 
-// CompactLine renders one control as a single short line.
+// CompactLine renders one control as a single short line. It carries only
+// what the agent needs to pick a stable locator (role/name/test id/region);
+// geometry stays behind the evidence ref (raw payload) and the capture
+// backend re-resolves bboxes deterministically at replay.
 func (e Element) CompactLine() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %q", e.kind(), e.label())
 	if e.TestID != "" && e.label() != e.TestID {
 		fmt.Fprintf(&b, " [%s]", e.TestID)
-	}
-	if e.ID != "" {
+	} else if e.ID != "" {
 		fmt.Fprintf(&b, " [id=%s]", e.ID)
 	}
-	fmt.Fprintf(&b, " region=%s bbox=[%.0f,%.0f %.0fx%.0f]", e.Region, e.BBox.X, e.BBox.Y, e.BBox.W, e.BBox.H)
+	fmt.Fprintf(&b, " region=%s", e.Region)
 	if !e.Enabled {
 		b.WriteString(" disabled")
 	}

@@ -123,7 +123,7 @@ func ConcatAudio(wavs []string, out string) error {
 	}
 	args := []string{"-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", out}
 	if out2, err := exec.Command(FFmpegPath(), args...).CombinedOutput(); err != nil {
-		return fmt.Errorf("ffmpeg concat: %w\n%s", err, out2)
+		return fmt.Errorf("ffmpeg concat: %w\n%s", err, tailLines(out2, 20))
 	}
 	return nil
 }
@@ -234,7 +234,7 @@ func BuildFinalMP4(tl *timeline.Timeline, opts RenderOptions) error {
 	)
 	out, err := exec.Command(FFmpegPath(), args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ffmpeg render: %w\n%s", err, out)
+		return fmt.Errorf("ffmpeg render: %w\n%s", err, tailLines(out, 20))
 	}
 	return nil
 }
@@ -248,7 +248,7 @@ func RenderSceneClip(srcMP4, dstMP4 string, startS, durS float64, width, height 
 		"-i", srcMP4, "-vf", scale, "-c:v", "libx264", "-preset", "veryfast", "-an", dstMP4}
 	out, err := exec.Command(FFmpegPath(), args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ffmpeg scene clip: %w\n%s", err, out)
+		return fmt.Errorf("ffmpeg scene clip: %w\n%s", err, tailLines(out, 20))
 	}
 	return nil
 }
@@ -264,9 +264,24 @@ func MakeThumbnail(srcMP4, dstPNG string, atS float64, width int) error {
 	args = append(args, dstPNG)
 	out, err := exec.Command(FFmpegPath(), args...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ffmpeg thumbnail: %w\n%s", err, out)
+		return fmt.Errorf("ffmpeg thumbnail: %w\n%s", err, tailLines(out, 20))
 	}
 	return nil
+}
+
+// tailLines keeps the last n lines of verbose backend output. ffmpeg logs
+// are longest at the head (configuration banners); the failure cause is at
+// the tail, so agent-facing errors carry the tail only.
+func tailLines(out []byte, n int) string {
+	s := strings.TrimRight(string(out), "\n")
+	if s == "" {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func WriteSRT(tl *timeline.Timeline, path string) error {
