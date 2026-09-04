@@ -198,6 +198,46 @@ func InferAnchor(cur recipe.StepPlan, neighborAction *recipe.StepPlan, speechAnc
 	return VisualAnchor{Kind: AnchorNone, Describe: "none"}
 }
 
+// beatKey joins scene+beat for segment/beat correlation. The reconciler
+// preserves recipe beat IDs on every segment, so direction matches on
+// keys — never on free-text labels (selector vs describe forms differ).
+func beatKey(scene, beat string) string { return scene + "|" + beat }
+
+// indexBeats groups beat plans by scene|beat, preserving step order.
+func indexBeats(beats []BeatPlan) map[string][]BeatPlan {
+	m := map[string][]BeatPlan{}
+	for _, b := range beats {
+		k := beatKey(b.SceneID, b.BeatID)
+		m[k] = append(m[k], b)
+	}
+	return m
+}
+
+// beatForAction resolves the semantic beat for an action segment.
+func beatForAction(idx map[string][]BeatPlan, scene, beat, actionType string) BeatPlan {
+	for _, b := range idx[beatKey(scene, beat)] {
+		if b.ActionType == actionType {
+			return b
+		}
+	}
+	for _, b := range idx[beatKey(scene, beat)] {
+		if b.ActionType != "" {
+			return b
+		}
+	}
+	return BeatPlan{}
+}
+
+// beatForSpeech resolves the semantic beat for a speech segment.
+func beatForSpeech(idx map[string][]BeatPlan, scene, beat, speechID string) BeatPlan {
+	for _, b := range idx[beatKey(scene, beat)] {
+		if b.SpeechID == speechID {
+			return b
+		}
+	}
+	return BeatPlan{}
+}
+
 // IntentFor renders a short human intent line for a beat.
 func IntentFor(bt SceneType, narration, actionLabel string) string {
 	n := strings.TrimSpace(narration)
@@ -315,9 +355,6 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 					expResult = "post-submit state"
 					needsConf = true
 				}
-			}
-			if st.Kind == recipe.StepWait && next != nil && next.Kind == recipe.StepSpeech {
-				needsConf = true
 			}
 			anchor := InferAnchor(*st, neighborAction, st.SpeechAnchor)
 			bp := BeatPlan{

@@ -2,6 +2,7 @@ package cinematic
 
 import (
 	"math"
+	"strings"
 
 	"github.com/pedro-dalben/autodoc/internal/timeline"
 	"github.com/pedro-dalben/autodoc/internal/visual"
@@ -83,8 +84,22 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 		decByBeat[d.BeatIndex] = d
 	}
 	beatIdxOf := func(sg timeline.AVSegment) int {
+		if sg.Kind != "action" {
+			// Speech/hold/wait segments inherit the attention of their
+			// beat only when the beat carries narration context.
+			for i, b := range beats {
+				if b.SceneID == sg.SceneID && b.BeatID == sg.BeatID {
+					return i
+				}
+			}
+			return -1
+		}
+		verb := sg.Label
+		if i := strings.Index(verb, " "); i > 0 {
+			verb = verb[:i]
+		}
 		for i, b := range beats {
-			if b.SceneID == sg.SceneID && (b.ActionLabel == sg.Label || b.SpeechID == sg.Label) {
+			if b.SceneID == sg.SceneID && b.BeatID == sg.BeatID && b.ActionType == verb {
 				return i
 			}
 		}
@@ -149,12 +164,10 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 				dec.Move, dec.Zoom, dec.Reason = CamContextRestore, 1, "context-restore"
 				break
 			}
-			if prevZoomed && sg.Kind == "speech" && cfg.ContinuityOn() {
-				// Hold the close-up while its narration anchor is on screen;
-				// restoring mid-explanation would disorient.
-				dec.Move, dec.Zoom, dec.Reason = CamStay, prevZoomOf(ft, i), "hold-focus-during-anchor"
-				break
-			}
+			// Narration and holds render full-frame (speech carries no
+			// bbox, so any inherited zoom would be dead metadata).
+			// Continuity lives in the decision trail, not in a zoom
+			// value the renderer cannot apply.
 			dec.Move, dec.Zoom, dec.Reason = CamStay, 1, "stable-read"
 		case "wait":
 			if sg.Compressed {
@@ -203,15 +216,6 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 	return plan
 }
 
-func prevZoomOf(ft *timeline.FinalTimeline, i int) float64 {
-	for j := i - 1; j >= 0; j-- {
-		if ft.Segments[j].Zoom > 1.01 {
-			return ft.Segments[j].Zoom
-		}
-	}
-	return 1
-}
-
 func flagReversals(plan *CameraPlan) {
 	lastZoomIdx := -1
 	lastOutIdx := -1
@@ -253,13 +257,18 @@ func ApplyCamera(ft *timeline.FinalTimeline, plan *CameraPlan) int {
 			continue
 		}
 		sg := &ft.Segments[d.SegmentIdx]
+		if sg.Kind != "action" {
+			// Only action windows carry render-time zoom; speech/hold
+			// render full-frame by construction.
+			if sg.Zoom != 1 {
+				sg.Zoom = 1
+				n++
+			}
+			continue
+		}
 		want := d.Zoom
 		if d.Move == CamStay || d.Move == CamContextRestore || d.Move == CamZoomOut || d.Move == CamCut {
-			if d.Reason == "hold-focus-during-anchor" {
-				want = d.Zoom
-			} else {
-				want = 1
-			}
+			want = 1
 		}
 		if sg.Zoom != want {
 			sg.Zoom = want

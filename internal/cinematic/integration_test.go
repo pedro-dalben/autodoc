@@ -93,10 +93,10 @@ func TestIntegrationEventsToEditPlan(t *testing.T) {
 	_ = planned
 	ft := &timeline.FinalTimeline{StoryboardHash: r.StoryboardHash}
 	ft.Segments = []timeline.AVSegment{
-		{SceneID: "scene-talk", Kind: "speech", Label: "scene-talk-beat-01-speech-001", StartS: 0, DurS: 2, VideoStartS: 0, VideoEndS: 2, Speed: 1},
-		{SceneID: "scene-talk", Kind: "action", Label: "click test-id=conv-alice", StartS: 2, DurS: 1.2, VideoStartS: 2, VideoEndS: 3.2, Speed: 1, Zoom: 1.08, NormBBox: bbox(0.05, 0.2, 0.12, 0.05)},
-		{SceneID: "scene-talk", Kind: "wait", Label: "visible", StartS: 3.2, DurS: 0.7, VideoStartS: 3.2, VideoEndS: 7.5, Speed: 6.1, Compressed: true, Compressible: true},
-		{SceneID: "scene-talk", Kind: "speech", Label: "scene-talk-beat-03-speech-001", StartS: 3.9, DurS: 2, VideoStartS: 7.5, VideoEndS: 9.5, Speed: 1},
+		{SceneID: "scene-talk", BeatID: "beat-01", Kind: "speech", Label: "scene-talk-beat-01-speech-001", StartS: 0, DurS: 2, VideoStartS: 0, VideoEndS: 2, Speed: 1},
+		{SceneID: "scene-talk", BeatID: "beat-01", Kind: "action", Label: "click [data-testid=\"conv-alice\"]", StartS: 2, DurS: 1.2, VideoStartS: 2, VideoEndS: 3.2, Speed: 1, Zoom: 1.08, NormBBox: bbox(0.05, 0.2, 0.12, 0.05)},
+		{SceneID: "scene-talk", BeatID: "beat-01", Kind: "wait", Label: "visible", StartS: 3.2, DurS: 0.7, VideoStartS: 3.2, VideoEndS: 7.5, Speed: 6.1, Compressed: true, Compressible: true},
+		{SceneID: "scene-talk", BeatID: "beat-03", Kind: "speech", Label: "scene-talk-beat-03-speech-001", StartS: 3.9, DurS: 2, VideoStartS: 7.5, VideoEndS: 9.5, Speed: 1},
 	}
 	ft.TotalS = 5.9
 	doc := PlanScenes(r, sb)
@@ -115,6 +115,11 @@ func TestIntegrationEventsToEditPlan(t *testing.T) {
 		if !types[want] {
 			t.Fatalf("EDL missing %s: %v", want, types)
 		}
+	}
+	// Correlated beats produce anticipation + result clips for the
+	// confirmed conversation click.
+	if !types["anticipation"] || !types["result"] {
+		t.Fatalf("EDL missing directed clips: %v", types)
 	}
 	// Causality: action clip precedes its transition/result clips.
 	actionIdx, transIdx := -1, -1

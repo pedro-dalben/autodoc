@@ -147,13 +147,27 @@ func BuildEditPlan(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.Cine
 		sceneOrder = append(sceneOrder, scene)
 		return se
 	}
-	beatOf := func(sg timeline.AVSegment) BeatPlan {
-		for _, b := range beats {
-			if b.SceneID == sg.SceneID && (b.ActionLabel == sg.Label || b.SpeechID == sg.Label) {
-				return b
-			}
+	idx := indexBeats(beats)
+	// actionTypeOf extracts the verb ("click", "fill", …) from a
+	// reconciled label ("click [data-testid=…]").
+	actionTypeOf := func(label string) string {
+		if i := strings.Index(label, " "); i > 0 {
+			return label[:i]
 		}
-		return BeatPlan{}
+		return label
+	}
+	beatOf := func(sg timeline.AVSegment) BeatPlan {
+		switch sg.Kind {
+		case "action":
+			return beatForAction(idx, sg.SceneID, sg.BeatID, actionTypeOf(sg.Label))
+		case "speech":
+			return beatForSpeech(idx, sg.SceneID, sg.BeatID, sg.Label)
+		default:
+			if bs := idx[beatKey(sg.SceneID, sg.BeatID)]; len(bs) > 0 {
+				return bs[0]
+			}
+			return BeatPlan{}
+		}
 	}
 	for _, sg := range ft.Segments {
 		se := get(sg.SceneID)
@@ -207,11 +221,17 @@ func EnsureResultHolds(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.
 		return 0
 	}
 	added := 0
+	idx := indexBeats(beats)
+	actionTypeOf := func(label string) string {
+		if i := strings.Index(label, " "); i > 0 {
+			return label[:i]
+		}
+		return label
+	}
 	need := func(sg timeline.AVSegment) (int, bool) {
-		for _, b := range beats {
-			if b.SceneID == sg.SceneID && b.ActionLabel == sg.Label && b.NeedsConfirmation {
-				return cfg.Results.MinHoldMs, true
-			}
+		b := beatForAction(idx, sg.SceneID, sg.BeatID, actionTypeOf(sg.Label))
+		if b.NeedsConfirmation {
+			return cfg.Results.MinHoldMs, true
 		}
 		return 0, false
 	}

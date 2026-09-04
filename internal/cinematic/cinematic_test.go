@@ -204,15 +204,15 @@ func TestResultHoldExtension(t *testing.T) {
 	cfg := testCfg()
 	ft := &timeline.FinalTimeline{StoryboardHash: "h"}
 	ft.Segments = []timeline.AVSegment{
-		{SceneID: "s", Kind: "speech", Label: "s-speech-001", StartS: 0, DurS: 1.0},
-		{SceneID: "s", Kind: "action", Label: "click save", StartS: 1.0, DurS: 0.5},
-		{SceneID: "s", Kind: "speech", Label: "s-speech-002", StartS: 1.5, DurS: 1.0},
+		{SceneID: "s", BeatID: "b", Kind: "speech", Label: "s-speech-001", StartS: 0, DurS: 1.0},
+		{SceneID: "s", BeatID: "b", Kind: "action", Label: "click save", StartS: 1.0, DurS: 0.5},
+		{SceneID: "s", BeatID: "b", Kind: "speech", Label: "s-speech-002", StartS: 1.5, DurS: 1.0},
 	}
 	ft.Speeches = []timeline.Segment{
 		{SpeechID: "s-speech-001", StartS: 0, EndS: 1.0, DurationS: 1.0},
 		{SpeechID: "s-speech-002", StartS: 1.5, EndS: 2.5, DurationS: 1.0},
 	}
-	beats := []BeatPlan{{Index: 0, SceneID: "s", ActionLabel: "click save", NeedsConfirmation: true, ExpectedResult: "ok"}}
+	beats := []BeatPlan{{Index: 0, SceneID: "s", BeatID: "b", ActionType: "click", ActionLabel: "click save", NeedsConfirmation: true, ExpectedResult: "ok"}}
 	added := EnsureResultHolds(ft, beats, cfg)
 	if added <= 0 {
 		t.Fatal("expected hold extension")

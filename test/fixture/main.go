@@ -233,6 +233,7 @@ dialog{border:0;border-radius:10px;padding:20px;min-width:320px}
 <div id="message-list" data-testid="message-list"></div>
 <div class="bubble" id="bubble" data-testid="cinematic-result-bubble"></div>
 <div class="success" id="okState" role="status" data-testid="cinematic-success"></div>
+<div class="success" id="receipt" role="status" data-testid="cinematic-receipt" style="background:#e0e7ff;color:#3730a3"></div>
 <div class="row"><input id="cinematic-input" data-testid="cinematic-input" placeholder="Digite sua mensagem"><button data-testid="cinematic-send" onclick="sendMessage()">Enviar</button></div>
 <p class="loading" id="sendLoading">Enviando...</p>
 </div>
@@ -244,7 +245,7 @@ dialog{border:0;border-radius:10px;padding:20px;min-width:320px}
 <p><button data-testid="cinematic-modal-save" onclick="document.getElementById('cmodal').close()">Fechar</button></p></dialog>
 <script>
 window.openConv=function(who){document.querySelectorAll('.conv').forEach(b=>b.classList.remove('active'));var p=document.getElementById('convPanel');var name=who==='alice'?'Alice Almeida':'Beto Barros';p.innerHTML='<strong></strong> <span>conversa aberta. Histórico carregado.</span>';p.querySelector('strong').textContent=name;document.querySelector('[data-testid=conv-'+who+']').classList.add('active')};
-window.sendMessage=async function(){var inp=document.getElementById('cinematic-input');var text=inp.value||'Olá, tudo bem?';var ld=document.getElementById('sendLoading');ld.style.display='block';var r=await fetch('/api/cinematic-send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})});await r.json();ld.style.display='none';var b=document.getElementById('bubble');b.style.display='block';b.textContent=text;var ok=document.getElementById('okState');ok.style.display='block';ok.textContent='Mensagem enviada com sucesso!';};
+window.sendMessage=async function(){var inp=document.getElementById('cinematic-input');var text=inp.value||'Olá, tudo bem?';var ld=document.getElementById('sendLoading');ld.style.display='block';var r=await fetch('/api/cinematic-send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})});await r.json();ld.style.display='none';var b=document.getElementById('bubble');b.style.display='block';b.textContent=text;var ok=document.getElementById('okState');ok.style.display='block';ok.textContent='Mensagem enviada com sucesso!';setTimeout(function(){var rc=document.getElementById('receipt');rc.style.display='block';rc.textContent='Comprovante #001 · entregue às '+new Date().toLocaleTimeString();},6000);};
 </script></body></html>`
 
 func handleApp(w http.ResponseWriter, r *http.Request) {

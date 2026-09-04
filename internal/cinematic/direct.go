@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pedro-dalben/autodoc/internal/recipe"
 	"github.com/pedro-dalben/autodoc/internal/storyboard"
@@ -61,7 +62,7 @@ func Direct(r *recipe.Recipe, sb *storyboard.Storyboard, ft *timeline.FinalTimel
 		edit.HoldsAddedMs = added
 	}
 
-	collisions := EvaluateCollisions(ft, callouts)
+	collisions := EvaluateCollisions(ft, scenes.Beats, callouts)
 	report := RunQA(ft, scenes, att, cam, edit, staticNar, collisions, cine)
 	plan := &CinematicPlan{
 		StoryboardHash: ft.StoryboardHash, Attention: att, Camera: cam,
@@ -72,46 +73,68 @@ func Direct(r *recipe.Recipe, sb *storyboard.Storyboard, ft *timeline.FinalTimel
 }
 
 // EvaluateCollisions checks planned callouts against directed targets for
-// overlap violations (deterministic geometry, no frame decoding).
-func EvaluateCollisions(ft *timeline.FinalTimeline, callouts []Callout) []string {
-	if len(callouts) == 0 {
+// overlap violations (deterministic geometry, no frame decoding). Each
+// callout anchors to the action box of its own beat, so sequential
+// callouts never stack on one rectangle.
+func EvaluateCollisions(ft *timeline.FinalTimeline, beats []BeatPlan, callouts []Callout) []string {
+	active := []Callout{}
+	for _, c := range callouts {
+		if c.Suppressed == "" {
+			active = append(active, c)
+		}
+	}
+	if len(active) == 0 {
 		return nil
 	}
+	byBeat := map[int]BeatPlan{}
+	for _, b := range beats {
+		byBeat[b.Index] = b
+	}
+	// Action boxes keyed by scene|beat|verb.
 	boxOf := map[string]*visual.BBox{}
 	for _, sg := range ft.Segments {
 		if sg.Kind == "action" && sg.NormBBox != nil {
-			boxOf[sg.SceneID+"|"+sg.Label] = sg.NormBBox
+			verb := sg.Label
+			if i := strings.Index(verb, " "); i > 0 {
+				verb = verb[:i]
+			}
+			boxOf[beatKey(sg.SceneID, sg.BeatID)+"|"+verb] = sg.NormBBox
 		}
 	}
-	var in CollisionInput
-	seen := map[string]bool{}
-	for _, c := range callouts {
-		if c.Suppressed != "" {
-			continue
-		}
-		var anchor *visual.BBox
-		for k, b := range boxOf {
-			if seen[k] {
-				continue
-			}
-			_ = b
-		}
-		// Attach to the first action box of the same scene when the
-		// anchor key is unknown; geometry stays deterministic.
-		for _, sg := range ft.Segments {
-			if sg.SceneID == c.SceneID && sg.Kind == "action" && sg.NormBBox != nil {
-				anchor = sg.NormBBox
-				break
-			}
-		}
-		rect := CalloutRect(anchor, c.Text, c.Place)
-		in.Callouts = append(in.Callouts, CalloutRectInput{Rect: rect, Text: c.Text})
-		if anchor != nil && in.Target == nil {
-			nb := *anchor
-			in.Target = &nb
-		}
+	// Callouts from different beats never share the frame (each is
+	// removed when its action completes), so inter-callout overlap is
+	// only meaningful within a beat. Group by beat and check each
+	// group against its own anchor.
+	byBeatCall := map[int][]Callout{}
+	for _, c := range active {
+		byBeatCall[c.BeatIndex] = append(byBeatCall[c.BeatIndex], c)
 	}
-	return CheckCollisions(in)
+	violations := []string{}
+	for _, group := range byBeatCall {
+		var gin CollisionInput
+		for _, c := range group {
+			var anchor *visual.BBox
+			if b, ok := byBeat[c.BeatIndex]; ok {
+				anchor = boxOf[beatKey(b.SceneID, b.BeatID)+"|"+b.ActionType]
+				if anchor == nil {
+					for k, v := range boxOf {
+						if strings.HasPrefix(k, beatKey(b.SceneID, b.BeatID)+"|") {
+							anchor = v
+							break
+						}
+					}
+				}
+			}
+			rect := CalloutRect(anchor, c.Text, c.Place)
+			gin.Callouts = append(gin.Callouts, CalloutRectInput{Rect: rect, Text: c.Text})
+			if anchor != nil && gin.Target == nil {
+				nb := *anchor
+				gin.Target = &nb
+			}
+		}
+		violations = append(violations, CheckCollisions(gin)...)
+	}
+	return violations
 }
 
 // WriteBundle persists scene_plan.json, cinematic_plan.json, edit_plan.json

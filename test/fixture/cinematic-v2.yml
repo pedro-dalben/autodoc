@@ -102,6 +102,13 @@ scenes:
                 test_id: cinematic-success
               timeout_ms: 10000
           - speech:
+              text: "O comprovante da mensagem chega em seguida."
+          - wait:
+              state: visible
+              target:
+                test_id: cinematic-receipt
+              timeout_ms: 10000
+          - speech:
               text: "Pronto! A mensagem foi enviada com sucesso."
           - hold:
               duration_ms: 600
