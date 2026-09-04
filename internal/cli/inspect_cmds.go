@@ -99,6 +99,13 @@ autodoc ui query --url http://localhost:8099/materiais --limit 8`,
 			out := evidence.Render(ref, raw, evidence.CompactInventory(inv))
 			if qJSON {
 				fmt.Fprintln(cmd.OutOrStdout(), raw)
+				sent := len(raw) + 1
+				return usage.Log(usageDir, usage.Entry{
+					Phase:  usage.PhaseBrowser,
+					Bytes:  sent,
+					Source: "autodoc",
+					Label:  "ui_query(json) " + inv.URL,
+				})
 			} else {
 				fmt.Fprint(cmd.OutOrStdout(), out.Text)
 			}
@@ -365,6 +372,7 @@ func newAgentCmd() *cobra.Command {
 	create.Flags().StringVar(&capsuleStoryboard, "storyboard", "", "storyboard path")
 	create.Flags().StringSliceVar(&sources, "source", nil, "relevant source file (repeatable)")
 	var capsulePath string
+	var capsuleStatusStoryboard string
 	status := &cobra.Command{Use: "capsule-status", Short: "Report whether a capsule's relevant sources changed", RunE: func(cmd *cobra.Command, args []string) error {
 		if capsulePath == "" {
 			return fmt.Errorf("--capsule is required")
@@ -374,6 +382,22 @@ func newAgentCmd() *cobra.Command {
 			return err
 		}
 		changed := capsule.ChangedSources()
+		if capsuleStatusStoryboard != "" {
+			root, _, sbPath, err := resolveFromCwd(capsuleStatusStoryboard)
+			if err != nil {
+				return err
+			}
+			_ = root
+			sb, err := storyboard.LoadFile(sbPath)
+			if err != nil {
+				return err
+			}
+			if sb.SourceHash() != capsule.StoryboardHash {
+				fmt.Fprintln(cmd.OutOrStdout(), "capsule: STALE")
+				fmt.Fprintln(cmd.OutOrStdout(), "changed: storyboard")
+				return nil
+			}
+		}
 		if len(changed) == 0 {
 			fmt.Fprintln(cmd.OutOrStdout(), "capsule: REUSE")
 		} else {
@@ -382,6 +406,7 @@ func newAgentCmd() *cobra.Command {
 		return nil
 	}}
 	status.Flags().StringVar(&capsulePath, "capsule", "", "capsule JSON path")
+	status.Flags().StringVar(&capsuleStatusStoryboard, "storyboard", "", "storyboard path to compare against the capsule hash (detects storyboard edits)")
 	guide := &cobra.Command{Use: "guide <topic>", Short: "Read one small on-demand workflow module", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		text, ok := agent.Guide(args[0])
 		if !ok {
