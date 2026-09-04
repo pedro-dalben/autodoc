@@ -102,7 +102,7 @@ func targetKey(t *Target) string {
 	if t == nil {
 		return ""
 	}
-	return fmt.Sprintf("ref=%s,test=%s,role=%s,name=%s,label=%s,text=%s,css=%s", t.Ref, t.TestID, t.Role, t.Name, t.Label, t.Text, t.CSS)
+	return fmt.Sprintf("ref=%s,test=%s,id=%s,role=%s,name=%s,label=%s,text=%s,css=%s", t.Ref, t.TestID, t.ID, t.Role, t.Name, t.Label, t.Text, t.CSS)
 }
 
 func boolKey(v *bool) string {

@@ -288,6 +288,7 @@ type BBox struct {
 // Element is one interactive element of a page inventory.
 type Element struct {
 	Tag         string `json:"tag"`
+	ID          string `json:"id,omitempty"`
 	Role        string `json:"role,omitempty"`
 	Name        string `json:"name,omitempty"` // accessible name / aria-label
 	Text        string `json:"text,omitempty"` // visible text (truncated)
@@ -338,6 +339,9 @@ func (e Element) CompactLine() string {
 	fmt.Fprintf(&b, "%s %q", e.kind(), e.label())
 	if e.TestID != "" && e.label() != e.TestID {
 		fmt.Fprintf(&b, " [%s]", e.TestID)
+	}
+	if e.ID != "" {
+		fmt.Fprintf(&b, " [id=%s]", e.ID)
 	}
 	fmt.Fprintf(&b, " region=%s bbox=[%.0f,%.0f %.0fx%.0f]", e.Region, e.BBox.X, e.BBox.Y, e.BBox.W, e.BBox.H)
 	if !e.Enabled {

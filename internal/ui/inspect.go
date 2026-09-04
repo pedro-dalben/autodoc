@@ -97,6 +97,7 @@ const inventoryJS = `
     const rect = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
     const e = {
       tag: el.tagName.toLowerCase(),
+	  id: el.id || '',
       role: implicitRole(el),
       name: labelOf(el),
       text: txt((el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? '' : el.innerText || el.textContent),

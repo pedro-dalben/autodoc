@@ -159,6 +159,9 @@ func TestLocatorPreference(t *testing.T) {
 	if got := tg2.PlaywrightSelector(); got != `[data-testid="x"]` {
 		t.Fatalf("bad selector %q", got)
 	}
+	if got := (&storyboard.Target{ID: "chat-conversation-595"}).PlaywrightSelector(); got != "#chat-conversation-595" {
+		t.Fatalf("id selector = %q", got)
+	}
 }
 
 func TestSecretSentinels(t *testing.T) {

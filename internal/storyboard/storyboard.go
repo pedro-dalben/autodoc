@@ -144,6 +144,7 @@ type Target struct {
 	// against Scene.Targets before the deterministic compiler sees the scene.
 	Ref    string `yaml:"ref,omitempty" json:"ref,omitempty"`
 	TestID string `yaml:"test_id,omitempty" json:"test_id,omitempty"`
+	ID     string `yaml:"id,omitempty" json:"id,omitempty"`
 	Role   string `yaml:"role,omitempty" json:"role,omitempty"`
 	Name   string `yaml:"name,omitempty" json:"name,omitempty"`
 	Label  string `yaml:"label,omitempty" json:"label,omitempty"`
@@ -503,7 +504,7 @@ func (t *Target) Empty() bool {
 	if t == nil {
 		return true
 	}
-	return t.Ref == "" && t.TestID == "" && t.Role == "" && t.Name == "" && t.Label == "" && t.Text == "" && t.CSS == ""
+	return t.Ref == "" && t.TestID == "" && t.ID == "" && t.Role == "" && t.Name == "" && t.Label == "" && t.Text == "" && t.CSS == ""
 }
 
 func (t *Target) Describe() string {
@@ -513,6 +514,8 @@ func (t *Target) Describe() string {
 	switch {
 	case t.TestID != "":
 		return fmt.Sprintf("test-id=%s", t.TestID)
+	case t.ID != "":
+		return fmt.Sprintf("id=%s", t.ID)
 	case t.Role != "" && t.Name != "":
 		return fmt.Sprintf("role=%s name=%q", t.Role, t.Name)
 	case t.Role != "":
@@ -533,6 +536,8 @@ func (t *Target) PlaywrightSelector() string {
 	switch {
 	case t.TestID != "":
 		return fmt.Sprintf("[data-testid=%q]", t.TestID)
+	case t.ID != "":
+		return fmt.Sprintf("#%s", t.ID)
 	case t.Role != "" && t.Name != "":
 		return fmt.Sprintf("role=%s[name=%q]", t.Role, t.Name)
 	case t.Role != "":
