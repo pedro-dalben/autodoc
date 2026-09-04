@@ -43,8 +43,13 @@ func resolveAuthState(auth string) string {
 	if auth == "" {
 		return ""
 	}
-	if _, err := os.Stat(auth); err == nil {
-		return auth
+	if info, err := os.Stat(auth); err == nil {
+		if !info.IsDir() {
+			return auth
+		}
+		// A project can legitimately contain a directory named like a
+		// profile (notably docs/). Directories are never storage-state files.
+		return filepath.Join(doctor.ProfileDir(auth), "storage-state.json")
 	}
 	p := filepath.Join(doctor.ProfileDir(auth), "storage-state.json")
 	if _, err := os.Stat(p); err == nil {
