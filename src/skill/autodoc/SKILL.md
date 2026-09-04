@@ -244,6 +244,9 @@ coordinates, no zoom levels, no timings. Useful storyboard hints:
 - `action: {result_target: {test_id: …}}` for outcomes the viewer must see.
 - `attention: none` / `camera: stay` only for special cases (tiny icons).
 - Never narrate mouse movement or camera motion; explain intent + result.
+- Close dialogs the way the app supports: if a modal ignores Escape,
+  reach its close button from the focused field (`Shift+Tab`, `Enter`)
+  instead of-record breaking pointer clicks.
 
 ## Safety checklist (before every record)
 
