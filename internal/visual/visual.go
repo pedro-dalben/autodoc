@@ -1,6 +1,9 @@
 package visual
 
-import "math"
+import (
+	"math"
+	"strings"
+)
 
 type CursorConfig struct {
 	Enabled  bool `yaml:"enabled" json:"enabled"`
@@ -53,13 +56,210 @@ type Tolerances struct {
 	FinalAVMs        int `yaml:"final_av_ms" json:"final_av_ms"`
 }
 
+// CinematicConfig is the AI Director / automatic editor configuration.
+// All fields are optional; nil *Config-level pointer in the storyboard
+// means "safe defaults". Every sub-block defaults to conservative,
+// SaaS-tutorial-safe behavior: director on, callouts off, sound off,
+// max zoom 1.25, subtle spotlight only.
+type CinematicConfig struct {
+	// Director is the master switch. Nil/true = enabled with safe
+	// defaults; explicit false disables all V2 direction (pure V1).
+	Director *bool `yaml:"director,omitempty" json:"director,omitempty"`
+	// Attention controls the Attention Director (focus/spotlight/etc).
+	Attention AttentionConfig `yaml:"attention,omitempty" json:"attention,omitempty"`
+	// Camera controls Camera Director V2 (continuity, context restore).
+	Camera DirectorCameraConfig `yaml:"camera,omitempty" json:"camera,omitempty"`
+	// Anticipation controls pre-action anticipation envelopes.
+	Anticipation AnticipationConfig `yaml:"anticipation,omitempty" json:"anticipation,omitempty"`
+	// Results controls action→result→confirmation and result holds.
+	Results ResultsConfig `yaml:"results,omitempty" json:"results,omitempty"`
+	// Editing controls dead-time classification and compression.
+	Editing EditingConfig `yaml:"editing,omitempty" json:"editing,omitempty"`
+	// Callouts controls the optional semantic callout engine.
+	Callouts CalloutConfig `yaml:"callouts,omitempty" json:"callouts,omitempty"`
+	// Sound is optional sound-design infrastructure (default off).
+	Sound SoundConfig `yaml:"sound,omitempty" json:"sound,omitempty"`
+	// QA thresholds for `validate --cinematic`.
+	QA QAConfig `yaml:"qa,omitempty" json:"qa,omitempty"`
+}
+
+type AttentionConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// Spotlight enables the subtle de-emphasis overlay (default true,
+	// but only applied when semantically justified and safe).
+	Spotlight *bool `yaml:"spotlight,omitempty" json:"spotlight,omitempty"`
+	// MaxDim is the spotlight dim alpha 0..1 (default 0.18, max 0.28).
+	MaxDim float64 `yaml:"max_dim,omitempty" json:"max_dim,omitempty"`
+}
+
+type DirectorCameraConfig struct {
+	// Continuity enables cross-scene camera continuity heuristics.
+	Continuity *bool `yaml:"continuity,omitempty" json:"continuity,omitempty"`
+	// ContextRestore enables automatic zoom-out after focused actions.
+	ContextRestore *bool `yaml:"context_restore,omitempty" json:"context_restore,omitempty"`
+	// MaxZoom caps render-time zoom (default 1.25, never above 1.5).
+	MaxZoom float64 `yaml:"max_zoom,omitempty" json:"max_zoom,omitempty"`
+	// MinTransitionMs floors camera transitions (default 250).
+	MinTransitionMs int `yaml:"min_transition_ms,omitempty" json:"min_transition_ms,omitempty"`
+}
+
+type AnticipationConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// RevealMs: target highlight before cursor arrives (default 350).
+	RevealMs int `yaml:"reveal_ms,omitempty" json:"reveal_ms,omitempty"`
+	// ApproachMs cap for cursor approach (default 500; cursor config
+	// min/max still apply).
+	ApproachMs int `yaml:"approach_ms,omitempty" json:"approach_ms,omitempty"`
+	// SettleMs: stabilization before the action (default 200).
+	SettleMs int `yaml:"settle_ms,omitempty" json:"settle_ms,omitempty"`
+}
+
+type ResultsConfig struct {
+	// Confirmation enables result detection + hold + highlight.
+	Confirmation *bool `yaml:"confirmation,omitempty" json:"confirmation,omitempty"`
+	// MinHoldMs floors result visibility (default 1000).
+	MinHoldMs int `yaml:"min_hold_ms,omitempty" json:"min_hold_ms,omitempty"`
+}
+
+type EditingConfig struct {
+	// CompressDeadTime enables smart wait compression (default true).
+	CompressDeadTime *bool `yaml:"compress_dead_time,omitempty" json:"compress_dead_time,omitempty"`
+	// MaxSpeed caps wait fast-forward (default 6).
+	MaxSpeed float64 `yaml:"max_speed,omitempty" json:"max_speed,omitempty"`
+}
+
+type CalloutConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// MaxPerScene caps callouts per scene (default 3).
+	MaxPerScene int `yaml:"max_per_scene,omitempty" json:"max_per_scene,omitempty"`
+}
+
+type SoundConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// Click/success are intensity hints: "", "subtle". Default "" (off).
+	Click   string `yaml:"click,omitempty" json:"click,omitempty"`
+	Success string `yaml:"success,omitempty" json:"success,omitempty"`
+	// Typing sounds are never enabled by default.
+	Typing bool `yaml:"typing,omitempty" json:"typing,omitempty"`
+}
+
+type QAConfig struct {
+	// MaxUnintentionalStaticMs caps unintentional static speech windows.
+	MaxUnintentionalStaticMs int `yaml:"max_unintentional_static_ms,omitempty" json:"max_unintentional_static_ms,omitempty"`
+	// MinTargetVisibleMs floors target visibility before action.
+	MinTargetVisibleMs int `yaml:"min_target_visible_ms,omitempty" json:"min_target_visible_ms,omitempty"`
+	// MinResultVisibleMs floors result visibility after action.
+	MinResultVisibleMs int `yaml:"min_result_visible_ms,omitempty" json:"min_result_visible_ms,omitempty"`
+}
+
+func boolOr(b *bool, def bool) bool {
+	if b == nil {
+		return def
+	}
+	return *b
+}
+
+func (c *CinematicConfig) ApplyDefaults() {
+	if c == nil {
+		return
+	}
+	if c.Attention.MaxDim == 0 {
+		c.Attention.MaxDim = 0.18
+	}
+	if c.Attention.MaxDim > 0.28 {
+		c.Attention.MaxDim = 0.28
+	}
+	if c.Camera.MaxZoom == 0 {
+		c.Camera.MaxZoom = 1.25
+	}
+	if c.Camera.MaxZoom > 1.5 {
+		c.Camera.MaxZoom = 1.5
+	}
+	if c.Camera.MinTransitionMs == 0 {
+		c.Camera.MinTransitionMs = 250
+	}
+	if c.Anticipation.RevealMs == 0 {
+		c.Anticipation.RevealMs = 350
+	}
+	if c.Anticipation.ApproachMs == 0 {
+		c.Anticipation.ApproachMs = 500
+	}
+	if c.Anticipation.SettleMs == 0 {
+		c.Anticipation.SettleMs = 200
+	}
+	if c.Results.MinHoldMs == 0 {
+		c.Results.MinHoldMs = 1000
+	}
+	if c.Editing.MaxSpeed == 0 {
+		c.Editing.MaxSpeed = 6
+	}
+	if c.Callouts.MaxPerScene == 0 {
+		c.Callouts.MaxPerScene = 3
+	}
+	if c.QA.MaxUnintentionalStaticMs == 0 {
+		c.QA.MaxUnintentionalStaticMs = 2500
+	}
+	if c.QA.MinTargetVisibleMs == 0 {
+		c.QA.MinTargetVisibleMs = 400
+	}
+	if c.QA.MinResultVisibleMs == 0 {
+		c.QA.MinResultVisibleMs = 800
+	}
+}
+
+// DefaultCinematic returns safe V2 defaults (director on, callouts off,
+// sound off). Used when the storyboard carries no cinematic block.
+func DefaultCinematic() CinematicConfig {
+	c := CinematicConfig{}
+	c.ApplyDefaults()
+	return c
+}
+
+// EffectiveCinematic resolves nil (absent block) to safe defaults.
+func EffectiveCinematic(c *CinematicConfig) CinematicConfig {
+	if c == nil {
+		return DefaultCinematic()
+	}
+	out := *c
+	out.ApplyDefaults()
+	return out
+}
+
+func (c CinematicConfig) DirectorOn() bool { return boolOr(c.Director, true) }
+func (c CinematicConfig) AttentionOn() bool {
+	return c.DirectorOn() && boolOr(c.Attention.Enabled, true)
+}
+func (c CinematicConfig) SpotlightOn() bool {
+	return c.AttentionOn() && boolOr(c.Attention.Spotlight, true)
+}
+func (c CinematicConfig) ContinuityOn() bool {
+	return c.DirectorOn() && boolOr(c.Camera.Continuity, true)
+}
+func (c CinematicConfig) ContextRestoreOn() bool {
+	return c.DirectorOn() && boolOr(c.Camera.ContextRestore, true)
+}
+func (c CinematicConfig) AnticipationOn() bool {
+	return c.DirectorOn() && boolOr(c.Anticipation.Enabled, true)
+}
+func (c CinematicConfig) ConfirmationOn() bool {
+	return c.DirectorOn() && boolOr(c.Results.Confirmation, true)
+}
+func (c CinematicConfig) CompressOn() bool {
+	return c.DirectorOn() && boolOr(c.Editing.CompressDeadTime, true)
+}
+func (c CinematicConfig) CalloutsOn() bool {
+	return c.DirectorOn() && boolOr(c.Callouts.Enabled, false)
+}
+func (c CinematicConfig) SoundOn() bool { return boolOr(c.Sound.Enabled, false) }
+
 type Config struct {
-	Cursor  CursorConfig `yaml:"cursor" json:"cursor"`
-	Click   ClickConfig  `yaml:"click" json:"click"`
-	Typing  TypingConfig `yaml:"typing" json:"typing"`
-	Camera  CameraConfig `yaml:"camera" json:"camera"`
-	Pacing  PacingConfig `yaml:"pacing" json:"pacing"`
-	SyncTol Tolerances   `yaml:"sync" json:"sync"`
+	Cursor    CursorConfig    `yaml:"cursor" json:"cursor"`
+	Click     ClickConfig     `yaml:"click" json:"click"`
+	Typing    TypingConfig    `yaml:"typing" json:"typing"`
+	Camera    CameraConfig    `yaml:"camera" json:"camera"`
+	Pacing    PacingConfig    `yaml:"pacing" json:"pacing"`
+	SyncTol   Tolerances      `yaml:"sync" json:"sync"`
+	Cinematic CinematicConfig `yaml:"cinematic,omitempty" json:"cinematic,omitempty"`
 }
 
 func Default() Config {
@@ -300,6 +500,12 @@ type VisualEvent struct {
 	DurationMs     int64   `json:"duration_ms,omitempty"`
 	CompressedFrom float64 `json:"compressed_from_s,omitempty"`
 	CompressedTo   float64 `json:"compressed_to_s,omitempty"`
+	// Cinematic V2 direction evidence (all optional, V1 readers ignore).
+	Anticipated  bool   `json:"anticipated,omitempty"`
+	Attention    string `json:"attention,omitempty"`
+	Spotlight    bool   `json:"spotlight,omitempty"`
+	Callout      string `json:"callout,omitempty"`
+	ResultHoldMs int    `json:"result_hold_ms,omitempty"`
 }
 
 func NormBBox(b BBox, vw, vh int) *BBox {
@@ -326,6 +532,12 @@ const OverlayJS = `(function(){
   var rp=mk('div','__autodoc_ripple','left:0;top:0;width:14px;height:14px;margin:-7px 0 0 -7px;opacity:0;border-radius:50%;border:3px solid #4f8cff;');
   var st={cx:0,cy:0,raf:0};
   function placeCursor(x,y){ st.cx=x; st.cy=y; cursor.style.transform='translate('+x+'px,'+y+'px)'; }
+  function modalOpen(){ try{ var d=document.querySelector('dialog[open]'); if(d) return d; var m=document.querySelector('.modal.open,.modal.show,[role="dialog"]'); if(m){ var r=m.getBoundingClientRect(); if(r.width>0&&r.height>0) return m; } }catch(e){} return null; }
+  function inside(el,x,y,w,h){ try{ if(!el) return false; var r=el.getBoundingClientRect(); return x>=r.left-8&&y>=r.top-8&&(x+w)<=r.right+8&&(y+h)<=r.bottom+8; }catch(e){ return false; } }
+  var spots=[];
+  function spotEl(){ var el=document.createElement('div'); el.setAttribute(NS,'1'); el.setAttribute('aria-hidden','true'); el.style.cssText='position:fixed;pointer-events:none;z-index:2147483645;background:rgba(10,12,20,0.18);opacity:0;transition:opacity .25s;'; document.documentElement.appendChild(el); spots.push(el); return el; }
+  for(var i=0;i<4;i++) spotEl();
+  var callout=mk('div','__autodoc_callout','left:0;top:0;opacity:0;max-width:280px;padding:6px 10px;border-radius:8px;background:rgba(17,20,32,.92);color:#fff;font:600 12px/1.4 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;');
   window.__autodocCues={
     cursorShow:function(x,y){ cursor.style.opacity='1'; placeCursor(x,y); },
     cursorHide:function(){ cursor.style.opacity='0'; },
@@ -358,7 +570,35 @@ const OverlayJS = `(function(){
       rp.style.transition='transform '+ms+'ms ease-out,opacity '+ms+'ms ease-out';
       rp.style.transform='translate('+x+'px,'+y+'px) scale(3.2)';
       rp.style.opacity='0';
-    }
+    },
+    spotlight:function(x,y,w,h,alpha){
+      var m=modalOpen();
+      if(m && !inside(m,x,y,w,h)) return false;
+      var pad=14;
+      x-=pad; y-=pad; w+=pad*2; h+=pad*2;
+      var W=window.innerWidth,H=window.innerHeight;
+      var pos=[[0,0,W,y],[0,y,x,h],[x+w,y,W-(x+w),h],[0,y+h,W,H-(y+h)]];
+      for(var i=0;i<4;i++){ var s=spots[i],p=pos[i]; s.style.opacity='1'; s.style.background='rgba(10,12,20,'+alpha+')'; s.style.transform='translate('+Math.max(0,p[0])+'px,'+Math.max(0,p[1])+'px)'; s.style.width=Math.max(0,p[2])+'px'; s.style.height=Math.max(0,p[3])+'px'; }
+      return true;
+    },
+    spotlightHide:function(){ for(var i=0;i<spots.length;i++) spots[i].style.opacity='0'; },
+    callout:function(text,x,y,w,h,place,success){
+      var cw=Math.min(280,Math.max(90,text.length*7+28));
+      var chh=30;
+      var cx=x+w/2-cw/2;
+      var cy=(place==='below')?y+h+10:y-chh-10;
+      if(cy<8) cy=y+h+10;
+      if(cy+chh>window.innerHeight-8) cy=y-chh-10;
+      if(cx<8) cx=8;
+      if(cx+cw>window.innerWidth-8) cx=window.innerWidth-8-cw;
+      callout.textContent=text;
+      callout.style.opacity='1';
+      callout.style.transform='translate('+cx+'px,'+cy+'px)';
+      callout.style.width=cw+'px';
+      if(success) callout.style.background='rgba(22,101,52,.94)';
+      else callout.style.background='rgba(17,20,32,.92)';
+    },
+    calloutHide:function(){ callout.style.opacity='0'; }
   };
 })();`
 
@@ -381,6 +621,32 @@ func HighlightJS(b BBox, ms int) string {
 func RippleJS(p Point, ms int) string {
 	return `window.__autodocCues&&window.__autodocCues.ripple(` + f2(p.X) + `,` + f2(p.Y) + `,` + itoa(ms) + `)`
 }
+
+// SpotlightJS dims everything outside bbox+pad at alpha (0..0.28).
+// Returns false when modal protection skips the overlay.
+func SpotlightJS(b BBox, alpha float64) string {
+	a := int(alpha*100 + 0.5)
+	return `window.__autodocCues&&window.__autodocCues.spotlight(` +
+		f2(b.X) + `,` + f2(b.Y) + `,` + f2(b.Width) + `,` + f2(b.Height) + `,` + f2(float64(a)/100) + `)`
+}
+
+func SpotlightHideJS() string { return `window.__autodocCues&&window.__autodocCues.spotlightHide()` }
+
+// CalloutJS shows a small semantic pill attached to bbox.
+func CalloutJS(text string, b BBox, place string, success bool) string {
+	s := "false"
+	if success {
+		s = "true"
+	}
+	q := "`" + strings.ReplaceAll(text, "`", "'") + "`"
+	_ = q
+	esc := strings.ReplaceAll(text, `\`, `\\`)
+	esc = strings.ReplaceAll(esc, `"`, `\"`)
+	return `window.__autodocCues&&window.__autodocCues.callout("` + esc + `",` +
+		f2(b.X) + `,` + f2(b.Y) + `,` + f2(b.Width) + `,` + f2(b.Height) + `,"` + place + `",` + s + `)`
+}
+
+func CalloutHideJS() string { return `window.__autodocCues&&window.__autodocCues.calloutHide()` }
 
 func f2(f float64) string {
 	return itoaFloat(f)

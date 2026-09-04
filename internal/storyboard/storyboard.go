@@ -14,8 +14,12 @@ type Storyboard struct {
 	Config  Config         `yaml:"config" json:"config"`
 	Setup   Setup          `yaml:"setup" json:"setup"`
 	Visuals *visual.Config `yaml:"visuals,omitempty" json:"visuals,omitempty"`
-	Scenes  []Scene        `yaml:"scenes" json:"scenes"`
-	Redact  Redact         `yaml:"redact" json:"redact"`
+	// Cinematic carries optional AI Director overrides. Nil/absent means
+	// safe V2 defaults (director on, callouts/sound off). V1 storyboards
+	// without this block keep validating and rendering unchanged.
+	Cinematic *visual.CinematicConfig `yaml:"cinematic,omitempty" json:"cinematic,omitempty"`
+	Scenes    []Scene                 `yaml:"scenes" json:"scenes"`
+	Redact    Redact                  `yaml:"redact" json:"redact"`
 }
 
 type Meta struct {
@@ -60,6 +64,9 @@ type Scene struct {
 	URL         string `yaml:"url" json:"url"`
 	Beats       []Beat `yaml:"beats" json:"beats"`
 	Screenshot  bool   `yaml:"screenshot" json:"screenshot"`
+	// Optional V2 overrides for special situations (default: semantic).
+	Camera    string `yaml:"camera,omitempty" json:"camera,omitempty"`
+	Attention string `yaml:"attention,omitempty" json:"attention,omitempty"`
 }
 
 type Beat struct {
@@ -77,6 +84,14 @@ type Event struct {
 type SpeechEvent struct {
 	Text  string `yaml:"text" json:"text"`
 	Voice string `yaml:"voice,omitempty" json:"voice,omitempty"`
+	// PauseBeforeMs/PauseAfterMs model pacing separately from the text.
+	// Content is never rewritten; pauses are orchestration only.
+	PauseBeforeMs int `yaml:"pause_before_ms,omitempty" json:"pause_before_ms,omitempty"`
+	PauseAfterMs  int `yaml:"pause_after_ms,omitempty" json:"pause_after_ms,omitempty"`
+	// Anchor optionally names the visual anchor for this narration
+	// (target describe string, scene id, or "viewport"). Empty means
+	// the director infers it from surrounding actions.
+	Anchor string `yaml:"anchor,omitempty" json:"anchor,omitempty"`
 }
 
 type Action struct {
@@ -94,6 +109,23 @@ type Action struct {
 	Instant *bool `yaml:"instant,omitempty" json:"instant,omitempty"`
 	// NoZoom disables camera focus for this action (default: follow visuals).
 	NoZoom *bool `yaml:"no_zoom,omitempty" json:"no_zoom,omitempty"`
+	// Camera overrides the camera strategy for this action:
+	// stay|focus|contextual|none. Empty = semantic default.
+	Camera string `yaml:"camera,omitempty" json:"camera,omitempty"`
+	// Attention overrides the attention strategy for this action:
+	// stay|focus|soft_zoom|pan|pan_zoom|spotlight|highlight|follow|
+	// context_restore|none. Empty = semantic default.
+	Attention string `yaml:"attention,omitempty" json:"attention,omitempty"`
+	// ResultTarget declares the expected visual result of this action
+	// (confirmed post-action, held on screen for MinHoldMs).
+	ResultTarget *Target `yaml:"result_target,omitempty" json:"result_target,omitempty"`
+	// ResultHoldMs overrides the result hold for this action.
+	ResultHoldMs *int `yaml:"result_hold_ms,omitempty" json:"result_hold_ms,omitempty"`
+	// Callout is an optional short semantic label ("1. Escolha a
+	// conversa"). Rendered only when callouts are enabled.
+	Callout string `yaml:"callout,omitempty" json:"callout,omitempty"`
+	// NoAnticipation disables pre-action anticipation for this action.
+	NoAnticipation *bool `yaml:"no_anticipation,omitempty" json:"no_anticipation,omitempty"`
 }
 
 type Target struct {
@@ -162,6 +194,10 @@ func (s *Storyboard) Validate() []error {
 	if s.Visuals != nil {
 		s.Visuals.ApplyDefaults()
 	}
+	if s.Cinematic != nil {
+		s.Cinematic.ApplyDefaults()
+		validateCinematic(s.Cinematic, &errs)
+	}
 	if strings.TrimSpace(s.Meta.Title) == "" {
 		add("meta.title is required")
 	}
@@ -218,6 +254,12 @@ func (s *Storyboard) Validate() []error {
 		if len(sc.Beats) == 0 {
 			add("scene %q: at least one beat is required", sc.ID)
 		}
+		if sc.Camera != "" && !validCameraOverride[sc.Camera] {
+			add("scene %q: unknown camera override %q", sc.ID, sc.Camera)
+		}
+		if sc.Attention != "" && !validAttentionOverride[sc.Attention] {
+			add("scene %q: unknown attention override %q", sc.ID, sc.Attention)
+		}
 		for j := range sc.Beats {
 			b := &sc.Beats[j]
 			if strings.TrimSpace(b.ID) == "" {
@@ -258,6 +300,12 @@ func (s *Storyboard) Validate() []error {
 					}
 					if len(ev.Speech.Text) > 2000 {
 						add("%s: speech.text exceeds 2000 chars", where)
+					}
+					if ev.Speech.PauseBeforeMs < 0 || ev.Speech.PauseBeforeMs > 5000 {
+						add("%s: speech.pause_before_ms out of range 0..5000", where)
+					}
+					if ev.Speech.PauseAfterMs < 0 || ev.Speech.PauseAfterMs > 5000 {
+						add("%s: speech.pause_after_ms out of range 0..5000", where)
 					}
 					id := SpeechID(sc.ID, b.ID, seenSpeech[sc.ID+"/"+b.ID])
 					seenSpeech[sc.ID+"/"+b.ID]++
@@ -313,6 +361,53 @@ func validateAction(a *Action, where string, errs *[]error) {
 	if a.Target != nil && a.Target.CSS != "" &&
 		a.Target.TestID == "" && a.Target.Role == "" && a.Target.Label == "" {
 		add("%s: warning-class: css-only locator is fragile; prefer test_id/role/label", where)
+	}
+	if a.Camera != "" && !validCameraOverride[a.Camera] {
+		add("%s: unknown camera override %q", where, a.Camera)
+	}
+	if a.Attention != "" && !validAttentionOverride[a.Attention] {
+		add("%s: unknown attention override %q", where, a.Attention)
+	}
+	if len(a.Callout) > 120 {
+		add("%s: callout exceeds 120 chars", where)
+	}
+	if a.ResultHoldMs != nil && (*a.ResultHoldMs < 0 || *a.ResultHoldMs > 10000) {
+		add("%s: result_hold_ms out of range 0..10000", where)
+	}
+}
+
+var validCameraOverride = map[string]bool{
+	"stay": true, "focus": true, "contextual": true, "none": true,
+}
+
+var validAttentionOverride = map[string]bool{
+	"stay": true, "focus": true, "soft_zoom": true, "pan": true,
+	"pan_zoom": true, "spotlight": true, "highlight": true, "follow": true,
+	"context_restore": true, "none": true,
+}
+
+func validateCinematic(c *visual.CinematicConfig, errs *[]error) {
+	add := func(f string, args ...any) { *errs = append(*errs, fmt.Errorf(f, args...)) }
+	if c.Camera.MaxZoom < 1 || c.Camera.MaxZoom > 1.5 {
+		add("cinematic.camera.max_zoom out of range 1..1.5: %v", c.Camera.MaxZoom)
+	}
+	if c.Attention.MaxDim < 0 || c.Attention.MaxDim > 0.28 {
+		add("cinematic.attention.max_dim out of range 0..0.28: %v", c.Attention.MaxDim)
+	}
+	if c.Anticipation.RevealMs < 0 || c.Anticipation.RevealMs > 2000 {
+		add("cinematic.anticipation.reveal_ms out of range 0..2000")
+	}
+	if c.Anticipation.SettleMs < 0 || c.Anticipation.SettleMs > 2000 {
+		add("cinematic.anticipation.settle_ms out of range 0..2000")
+	}
+	if c.Results.MinHoldMs < 0 || c.Results.MinHoldMs > 10000 {
+		add("cinematic.results.min_hold_ms out of range 0..10000")
+	}
+	if c.Editing.MaxSpeed < 1 || c.Editing.MaxSpeed > 16 {
+		add("cinematic.editing.max_speed out of range 1..16: %v", c.Editing.MaxSpeed)
+	}
+	if c.Sound.Typing && (c.Sound.Enabled == nil || !*c.Sound.Enabled) {
+		add("cinematic.sound.typing requires sound.enabled")
 	}
 }
 
@@ -400,6 +495,18 @@ func (s *Storyboard) VisualsOrDefault() visual.Config {
 		return visual.Default()
 	}
 	c := *s.Visuals
+	c.ApplyDefaults()
+	return c
+}
+
+// CinematicOrDefault resolves the effective AI Director configuration.
+// Nil storyboard or absent block yields safe V2 defaults; V1 storyboards
+// are unaffected structurally but still get intelligent direction.
+func (s *Storyboard) CinematicOrDefault() visual.CinematicConfig {
+	if s == nil || s.Cinematic == nil {
+		return visual.DefaultCinematic()
+	}
+	c := *s.Cinematic
 	c.ApplyDefaults()
 	return c
 }

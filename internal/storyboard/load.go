@@ -38,6 +38,9 @@ func (s *Storyboard) SourceHash() string {
 	if s.Visuals != nil {
 		fmt.Fprintf(h, "visuals:%+v|", *s.Visuals)
 	}
+	if s.Cinematic != nil {
+		fmt.Fprintf(h, "cinematic:%+v|", *s.Cinematic)
+	}
 	for _, st := range s.Setup.Sequence {
 		switch {
 		case st.Action != nil:

@@ -46,13 +46,17 @@ const (
 )
 
 type StepPlan struct {
-	Kind     StepKind              `json:"kind"`
-	Index    int                   `json:"index"`
-	SpeechID string                `json:"speech_id,omitempty"`
-	Text     string                `json:"text,omitempty"`
-	Action   *storyboard.Action    `json:"action,omitempty"`
-	Wait     *storyboard.WaitEvent `json:"wait,omitempty"`
-	HoldMs   int                   `json:"hold_ms,omitempty"`
+	Kind     StepKind `json:"kind"`
+	Index    int      `json:"index"`
+	SpeechID string   `json:"speech_id,omitempty"`
+	Text     string   `json:"text,omitempty"`
+	// PauseBeforeMs/PauseAfterMs orchestrate pacing without rewriting text.
+	PauseBeforeMs int                   `json:"pause_before_ms,omitempty"`
+	PauseAfterMs  int                   `json:"pause_after_ms,omitempty"`
+	SpeechAnchor  string                `json:"speech_anchor,omitempty"`
+	Action        *storyboard.Action    `json:"action,omitempty"`
+	Wait          *storyboard.WaitEvent `json:"wait,omitempty"`
+	HoldMs        int                   `json:"hold_ms,omitempty"`
 }
 
 type SpeechSegment struct {
@@ -89,7 +93,7 @@ func Compile(sb *storyboard.Storyboard, ttsModel, ttsVoice, ttsLang string, ttsS
 				case ev.Speech != nil:
 					sid := fmt.Sprintf("%s-%s-speech-%03d", sc.ID, b.ID, speechIdx+1)
 					speechIdx++
-					bp.Steps = append(bp.Steps, StepPlan{Kind: StepSpeech, Index: len(bp.Steps), SpeechID: sid, Text: ev.Speech.Text})
+					bp.Steps = append(bp.Steps, StepPlan{Kind: StepSpeech, Index: len(bp.Steps), SpeechID: sid, Text: ev.Speech.Text, PauseBeforeMs: ev.Speech.PauseBeforeMs, PauseAfterMs: ev.Speech.PauseAfterMs, SpeechAnchor: ev.Speech.Anchor})
 					r.SpeechSegments = append(r.SpeechSegments, SpeechSegment{
 						ID:   sid,
 						Text: ev.Speech.Text,

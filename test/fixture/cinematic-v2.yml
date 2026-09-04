@@ -1,0 +1,154 @@
+version: 2
+meta:
+  title: "Central de conversas — tour dirigido"
+  description: "Fixture Cinematic V2: foco lateral, antecipação, pan, digitação, envio, confirmação e restauração de contexto"
+  language: "pt-BR"
+  resolution: "1280x720"
+  fps: 30
+config:
+  base_url: "http://localhost:8099"
+  viewport_width: 1280
+  viewport_height: 720
+cinematic:
+  director: true
+  attention:
+    enabled: true
+    spotlight: true
+  camera:
+    continuity: true
+    context_restore: true
+    max_zoom: 1.25
+  anticipation:
+    enabled: true
+  results:
+    confirmation: true
+    min_hold_ms: 1000
+  editing:
+    compress_dead_time: true
+  callouts:
+    enabled: true
+  sound:
+    enabled: false
+setup:
+  start_url: "/cinematic"
+  expected_states:
+    - description: "cinematic page visible"
+      state: visible
+      timeout_ms: 8000
+redact:
+  selectors: []
+  mask_password_inputs: true
+scenes:
+  - id: scene-home
+    title: "Visão geral"
+    url: "/"
+    screenshot: true
+    beats:
+      - id: beat-01
+        sequence:
+          - speech:
+              text: "Bem-vindo ao tour da central de conversas."
+              anchor: viewport
+          - hold:
+              duration_ms: 500
+  - id: scene-talk
+    title: "Conversando com direção"
+    url: "/cinematic"
+    beats:
+      - id: beat-01
+        sequence:
+          - speech:
+              text: "Na lateral esquerda estão as suas conversas."
+              anchor: viewport
+          - speech:
+              text: "Para começar, selecione a conversa desejada."
+          - action:
+              type: click
+              target:
+                test_id: conv-alice
+              callout: "1. Escolha a conversa"
+              result_target:
+                test_id: conversation-panel
+          - wait:
+              state: visible
+              target:
+                test_id: conversation-panel
+              timeout_ms: 8000
+      - id: beat-02
+        sequence:
+          - speech:
+              text: "Em seguida, digite a mensagem desejada no campo abaixo."
+          - action:
+              type: fill
+              target:
+                test_id: cinematic-input
+              value: "Olá, tudo bem?"
+              callout: "2. Digite a mensagem"
+      - id: beat-03
+        sequence:
+          - speech:
+              text: "Envie a mensagem e aguarde a confirmação."
+          - action:
+              type: click
+              target:
+                test_id: cinematic-send
+              callout: "3. Envie"
+              result_target:
+                test_id: cinematic-success
+              result_hold_ms: 1200
+          - wait:
+              state: visible
+              target:
+                test_id: cinematic-success
+              timeout_ms: 10000
+          - speech:
+              text: "Pronto! A mensagem foi enviada com sucesso."
+          - hold:
+              duration_ms: 600
+      - id: beat-04
+        sequence:
+          - speech:
+              text: "O banner superior resume a central de conversas."
+          - action:
+              type: hover
+              target:
+                test_id: cinematic-banner
+          - speech:
+              text: "Vamos abrir os detalhes da conversa."
+          - action:
+              type: click
+              target:
+                test_id: cinematic-modal-btn
+              result_target:
+                test_id: cinematic-modal-input
+          - wait:
+              state: visible
+              target:
+                test_id: cinematic-modal-input
+              timeout_ms: 8000
+          - speech:
+              text: "Anote um lembrete rápido."
+          - action:
+              type: fill
+              target:
+                test_id: cinematic-modal-input
+              value: "retornar amanhã"
+              instant: true
+          - action:
+              type: click
+              target:
+                test_id: cinematic-modal-save
+          - speech:
+              text: "O ícone ao lado do título oferece ajuda contextual."
+              anchor: viewport
+          - action:
+              type: click
+              target:
+                test_id: cinematic-info-icon
+              attention: none
+              camera: stay
+          - speech:
+              text: "É isso. Você já domina a central de conversas."
+              anchor: viewport
+          - hold:
+              duration_ms: 900
