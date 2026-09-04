@@ -142,7 +142,7 @@ func RunQA(ft *timeline.FinalTimeline, scenes *ScenePlanDoc, att *AttentionPlan,
 			break
 		}
 	}
-	gate("context-restoration", restored, "final context restore planned", fmt.Sprint(restored), "true")
+	gate("context-restoration", restored, fmt.Sprintf("context restore planned: %t", restored), fmt.Sprint(restored), "true")
 
 	// 9. Target visibility: every action segment carries bbox evidence
 	// and (when zoomed) respected the safe frame.
