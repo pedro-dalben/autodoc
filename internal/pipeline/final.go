@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/pedro-dalben/autodoc/internal/capture"
+	"github.com/pedro-dalben/autodoc/internal/cinematic"
 	"github.com/pedro-dalben/autodoc/internal/media"
 	"github.com/pedro-dalben/autodoc/internal/timeline"
 )
@@ -23,6 +24,38 @@ func (r *Run) ReconcileFinal() (*timeline.FinalTimeline, error) {
 			return nil, err
 		}
 	}
+	sceneEvents, rawDur := r.collectSceneEvidence()
+	ft := timeline.Reconcile(r.Timeline, r.Recipe, sceneEvents, rawDur, reconcileOpts(r))
+	r.Final = ft
+	// Cinematic V2 direction: semantic scene plan -> attention/camera ->
+	// edit plan -> QA. Adjustments are sync-safe (camera zooms,
+	// video-only result holds); the directed timeline is what renders.
+	cine := r.SB.CinematicOrDefault()
+	vis := r.SB.VisualsOrDefault()
+	bundle := cinematic.Direct(r.Recipe, r.SB, ft, sceneEvents, vis, cine)
+	r.Cinematic = bundle
+	out := filepath.Join(r.WorkDir, r.RunID, "final_timeline.json")
+	if err := ft.WriteJSON(out); err != nil {
+		return nil, err
+	}
+	_ = ft.WriteJSON(filepath.Join(r.WorkDir, "final_timeline.json"))
+	_ = cinematic.WriteBundle(filepath.Join(r.WorkDir, r.RunID), bundle)
+	_ = cinematic.WriteBundle(r.WorkDir, bundle)
+	return ft, nil
+}
+
+// reconcileOpts honors the cinematic editing budget (wait fast-forward
+// cap) while keeping V1 defaults for storyboards without direction.
+func reconcileOpts(r *Run) timeline.ReconcileOpts {
+	opts := timeline.DefaultReconcileOpts()
+	cine := r.SB.CinematicOrDefault()
+	if cine.Editing.MaxSpeed > 0 {
+		opts.WaitSpeed = cine.Editing.MaxSpeed
+	}
+	return opts
+}
+
+func (r *Run) collectSceneEvidence() (map[string][]timeline.ActualEvent, map[string]float64) {
 	sceneEvents := map[string][]timeline.ActualEvent{}
 	rawDur := map[string]float64{}
 	for _, sc := range r.Recipe.Scenes {
@@ -35,14 +68,25 @@ func (r *Run) ReconcileFinal() (*timeline.FinalTimeline, error) {
 			}
 		}
 	}
-	ft := timeline.Reconcile(r.Timeline, r.Recipe, sceneEvents, rawDur, timeline.DefaultReconcileOpts())
-	r.Final = ft
-	out := filepath.Join(r.WorkDir, r.RunID, "final_timeline.json")
-	if err := ft.WriteJSON(out); err != nil {
-		return nil, err
+	return sceneEvents, rawDur
+}
+
+// BuildCinematic rebuilds the V2 director bundle for the loaded final
+// timeline (used by `validate --cinematic` on existing runs). The
+// direction is idempotent: re-running over an already-directed timeline
+// reproduces the same plans and report.
+func (r *Run) BuildCinematic() (*cinematic.Bundle, error) {
+	if r.Final == nil {
+		if err := r.LoadFinal(); err != nil {
+			return nil, err
+		}
 	}
-	_ = ft.WriteJSON(filepath.Join(r.WorkDir, "final_timeline.json"))
-	return ft, nil
+	sceneEvents, _ := r.collectSceneEvidence()
+	cine := r.SB.CinematicOrDefault()
+	vis := r.SB.VisualsOrDefault()
+	bundle := cinematic.Direct(r.Recipe, r.SB, r.Final, sceneEvents, vis, cine)
+	r.Cinematic = bundle
+	return bundle, nil
 }
 
 func (r *Run) loadSceneEvents(sceneID string) []capture.EventRecord {

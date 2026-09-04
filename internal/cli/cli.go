@@ -598,6 +598,13 @@ func newRenderCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "cue debug: %s\n", debugPath)
 			}
 			printSyncReport(cmd.OutOrStdout(), run.Final)
+			if bundle, err := run.BuildCinematic(); err == nil && bundle.Report != nil {
+				status := "PASS"
+				if !bundle.Report.Pass {
+					status = "FAIL"
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "AUTODOC_CINEMATIC_QA: %s (score %d/100)\n", status, bundle.Report.Score)
+			}
 			return nil
 		},
 	}
@@ -710,6 +717,7 @@ func newExportCmd() *cobra.Command {
 func newValidateCmd() *cobra.Command {
 	var sbPath string
 	var syncOnly bool
+	var cinematicOnly bool
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate storyboard + timeline + artifacts coherence",
@@ -734,8 +742,19 @@ func newValidateCmd() *cobra.Command {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "validate OK: %d segments, %.2fs total\n", len(run.Timeline.Segments), run.Timeline.TotalS)
 			if err := run.LoadFinal(); err != nil {
-				if syncOnly {
+				if syncOnly || cinematicOnly {
 					return fmt.Errorf("no final timeline; run record first: %w", err)
+				}
+				return nil
+			}
+			if cinematicOnly {
+				bundle, err := run.BuildCinematic()
+				if err != nil {
+					return err
+				}
+				fmt.Fprint(cmd.OutOrStdout(), bundle.Report.Print())
+				if !bundle.Report.Pass {
+					return fmt.Errorf("cinematic check FAILED")
 				}
 				return nil
 			}
@@ -748,6 +767,7 @@ func newValidateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
 	cmd.Flags().BoolVar(&syncOnly, "sync", false, "only report A/V synchronization (fails when drift exceeds tolerance)")
+	cmd.Flags().BoolVar(&cinematicOnly, "cinematic", false, "report Cinematic V2 direction QA (fails when any gate fails)")
 	return cmd
 }
 

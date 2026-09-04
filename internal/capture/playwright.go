@@ -35,6 +35,7 @@ func (b *PlaywrightBackend) Start(opts StartOptions) error {
 	b.opts = opts
 	b.vis = opts.Visuals
 	b.vis.ApplyDefaults()
+	b.vis.Cinematic.ApplyDefaults()
 	b.events = nil
 	b.chapters = nil
 	b.started = time.Now()
@@ -129,6 +130,66 @@ func (b *PlaywrightBackend) eval(js string) {
 	}
 	_, _ = b.page.Evaluate(js)
 }
+
+func (b *PlaywrightBackend) evalBool(js string) bool {
+	if b.page == nil {
+		return false
+	}
+	out, err := b.page.Evaluate(js)
+	if err != nil {
+		return false
+	}
+	v, _ := out.(bool)
+	return v
+}
+
+func (b *PlaywrightBackend) cine() visual.CinematicConfig {
+	c := b.vis.Cinematic
+	c.ApplyDefaults()
+	return c
+}
+
+// wantsAnticipation reports whether pre-action direction applies.
+func wantsAnticipation(c visual.CinematicConfig, a *storyboard.Action) bool {
+	if a == nil || !c.AnticipationOn() {
+		return false
+	}
+	if a.NoAnticipation != nil && *a.NoAnticipation {
+		return false
+	}
+	if a.Attention == "none" || a.Camera == "none" {
+		return false
+	}
+	switch a.Type {
+	case "click", "fill", "type", "select", "press", "check", "uncheck":
+		return true
+	}
+	return false
+}
+
+func (b *PlaywrightBackend) spotlightShow(bb visual.BBox) bool {
+	c := b.cine()
+	if !c.SpotlightOn() || !bb.Valid() {
+		return false
+	}
+	return b.evalBool(visual.SpotlightJS(bb, c.Attention.MaxDim))
+}
+
+func (b *PlaywrightBackend) spotlightHide() { b.eval(visual.SpotlightHideJS()) }
+
+func (b *PlaywrightBackend) calloutShow(text string, bb visual.BBox, success bool) {
+	c := b.cine()
+	if !c.CalloutsOn() || text == "" || !bb.Valid() {
+		return
+	}
+	place := "above"
+	if bb.Y < float64(b.vh)/3 {
+		place = "below"
+	}
+	b.eval(visual.CalloutJS(text, bb, place, success))
+}
+
+func (b *PlaywrightBackend) calloutHide() { b.eval(visual.CalloutHideJS()) }
 
 func (b *PlaywrightBackend) ensureOverlay() {
 	if !b.vis.CursorOn() && !b.vis.ClickOn() {
@@ -288,19 +349,45 @@ func (b *PlaywrightBackend) resolveValue(a storyboard.Action) (string, bool, err
 	return a.Text, false, nil
 }
 
-func (b *PlaywrightBackend) cueFocus(sel string, loc playwright.Locator) (visual.BBox, visual.Point, bool) {
+func (b *PlaywrightBackend) cueFocus(sel string, loc playwright.Locator, act *storyboard.Action) (visual.BBox, visual.Point, bool) {
 	b.ensureOverlay()
 	bb, ok := b.bboxOf(sel)
 	if !ok {
 		return visual.BBox{}, visual.Point{}, false
 	}
 	target := bb.Center()
-	from, _ := b.moveCursorTo(target)
-	if b.vis.HiliteOn() {
-		b.highlight(bb, b.vis.Pacing.HighlightMs+400)
-		time.Sleep(time.Duration(b.vis.Pacing.HighlightMs) * time.Millisecond)
+	c := b.cine()
+	if wantsAnticipation(c, act) {
+		// Anticipation envelope: target reveal -> cursor approach ->
+		// stabilization. Highlight covers the whole envelope so the
+		// viewer sees intent before motion.
+		approachMax := c.Anticipation.ApproachMs
+		_ = approachMax
+		total := c.Anticipation.RevealMs + 450 + c.Anticipation.SettleMs
+		if b.vis.HiliteOn() {
+			b.highlight(bb, total+400)
+			time.Sleep(time.Duration(c.Anticipation.RevealMs) * time.Millisecond)
+		}
+		if c.SpotlightOn() && (act.Attention == "" || act.Attention == "spotlight" || act.Attention == "focus" || act.Attention == "follow" || act.Attention == "pan" || act.Attention == "pan_zoom") {
+			b.spotlightShow(bb)
+		}
+		if c.CalloutsOn() && act.Callout != "" {
+			b.calloutShow(act.Callout, bb, false)
+		}
+		from, _ := b.moveCursorTo(target)
+		_ = from
+		time.Sleep(time.Duration(c.Anticipation.SettleMs) * time.Millisecond)
+	} else {
+		from, _ := b.moveCursorTo(target)
+		if b.vis.HiliteOn() {
+			b.highlight(bb, b.vis.Pacing.HighlightMs+400)
+			time.Sleep(time.Duration(b.vis.Pacing.HighlightMs) * time.Millisecond)
+		}
+		_ = from
+		if c.CalloutsOn() && act != nil && act.Callout != "" {
+			b.calloutShow(act.Callout, bb, false)
+		}
 	}
-	_ = from
 	return bb, target, true
 }
 
@@ -325,7 +412,7 @@ func (b *PlaywrightBackend) DoAction(a storyboard.Action) (ActionResult, error) 
 		return b.doPress(a, start)
 	case "select":
 		sel := selectorFor(a.Target)
-		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel))
+		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel), &a)
 		focusAt := b.nowMs()
 		opt := playwright.SelectOptionValues{Values: &[]string{a.Value}}
 		if a.Text != "" && a.Value == "" {
@@ -341,7 +428,7 @@ func (b *PlaywrightBackend) DoAction(a storyboard.Action) (ActionResult, error) 
 		return ActionResult{AtMs: start, ElapsedMs: b.nowMs() - start}, nil
 	case "check", "uncheck":
 		sel := selectorFor(a.Target)
-		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel))
+		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel), &a)
 		focusAt := b.nowMs()
 		var err error
 		if a.Type == "check" {
@@ -359,7 +446,7 @@ func (b *PlaywrightBackend) DoAction(a storyboard.Action) (ActionResult, error) 
 		return ActionResult{AtMs: start, ElapsedMs: b.nowMs() - start}, nil
 	case "hover":
 		sel := selectorFor(a.Target)
-		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel))
+		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel), &a)
 		focusAt := b.nowMs()
 		if err := b.page.Locator(sel).Hover(); err != nil {
 			return ActionResult{}, fmt.Errorf("hover %s: %w", sel, err)
@@ -410,7 +497,7 @@ func (b *PlaywrightBackend) DoAction(a storyboard.Action) (ActionResult, error) 
 func (b *PlaywrightBackend) doClick(a storyboard.Action, start int64) (ActionResult, error) {
 	sel := selectorFor(a.Target)
 	loc := b.page.Locator(sel)
-	bb, target, ok := b.cueFocus(sel, loc)
+	bb, target, ok := b.cueFocus(sel, loc, &a)
 	focusAt := b.nowMs()
 	if ok {
 		b.ripple(target)
@@ -438,7 +525,7 @@ func (b *PlaywrightBackend) doType(a storyboard.Action, start int64) (ActionResu
 	if err != nil {
 		return ActionResult{}, err
 	}
-	bb, target, ok := b.cueFocus(sel, loc)
+	bb, target, ok := b.cueFocus(sel, loc, &a)
 	focusAt := b.nowMs()
 	sensitive := fromSecret || b.isSensitive(sel, loc)
 	progressive := b.vis.TypingOn() && b.vis.Typing.Progressive && !sensitive && !a.IsInstant()
@@ -464,12 +551,21 @@ func (b *PlaywrightBackend) doType(a storyboard.Action, start int64) (ActionResu
 	typingEnd := b.nowMs()
 	actionAt := typingEnd
 	b.settle()
+	cc := b.cine()
 	ev := visual.VisualEvent{
 		Type: "interaction", Interaction: a.Type,
 		StartedAtMs: start, FocusAtMs: focusAt, ActionAtMs: actionAt, EndedAtMs: b.nowMs(),
 		TypingChars: len([]rune(value)), TypingMs: typingEnd - typingStart,
 		Progressive: progressive, Instant: !progressive, Sensitive: sensitive,
-		Zoom: b.zoomFor(a, bb, ok),
+		Zoom:        b.zoomFor(a, bb, ok),
+		Anticipated: wantsAnticipation(cc, &a),
+		Attention:   attentionOf(a),
+	}
+	if ev.Anticipated {
+		ev.Spotlight = cc.SpotlightOn()
+	}
+	if cc.CalloutsOn() && a.Callout != "" {
+		ev.Callout = a.Callout
 	}
 	if ok {
 		ev.BBox = &bb
@@ -477,6 +573,10 @@ func (b *PlaywrightBackend) doType(a storyboard.Action, start int64) (ActionResu
 		ev.CursorTo = &target
 	}
 	b.recordV("visual", a.Type+" "+sel, ev)
+	if a.ResultTarget == nil || a.ResultTarget.Empty() {
+		b.spotlightHide()
+		b.calloutHide()
+	}
 	safe := sel
 	if fromSecret {
 		safe += " <secret>"
@@ -493,7 +593,7 @@ func (b *PlaywrightBackend) doPress(a storyboard.Action, start int64) (ActionRes
 	}
 	if a.Target != nil && !a.Target.Empty() {
 		sel := selectorFor(a.Target)
-		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel))
+		bb, target, ok := b.cueFocus(sel, b.page.Locator(sel), &a)
 		focusAt := b.nowMs()
 		if err := b.page.Locator(sel).Press(key); err != nil {
 			return ActionResult{}, fmt.Errorf("press %s: %w", key, err)
@@ -526,17 +626,94 @@ func (b *PlaywrightBackend) zoomFor(a storyboard.Action, bb visual.BBox, ok bool
 }
 
 func (b *PlaywrightBackend) emitInteraction(kind string, bb visual.BBox, target visual.Point, ok bool, start, focusAt, actionAt int64, a storyboard.Action) {
+	c := b.cine()
 	ev := visual.VisualEvent{
 		Type: "interaction", Interaction: kind,
 		StartedAtMs: start, FocusAtMs: focusAt, ActionAtMs: actionAt, EndedAtMs: b.nowMs(),
-		Zoom: b.zoomFor(a, bb, ok),
+		Zoom:        b.zoomFor(a, bb, ok),
+		Anticipated: wantsAnticipation(c, &a),
+		Attention:   attentionOf(a),
 	}
 	if ok {
 		ev.BBox = &bb
 		ev.NormBBox = visual.NormBBox(bb, b.vw, b.vh)
 		ev.CursorTo = &target
 	}
+	if ev.Anticipated {
+		ev.Spotlight = c.SpotlightOn()
+	}
+	if c.CalloutsOn() && a.Callout != "" {
+		ev.Callout = a.Callout
+	}
 	b.recordV("visual", kind+" "+selectorFor(a.Target), ev)
+	if a.ResultTarget == nil || a.ResultTarget.Empty() {
+		b.spotlightHide()
+		b.calloutHide()
+	}
+}
+
+// attentionOf resolves the effective attention label for evidence.
+func attentionOf(a storyboard.Action) string {
+	if a.Attention != "" {
+		return a.Attention
+	}
+	switch a.Type {
+	case "click", "fill", "type", "select":
+		return "spotlight"
+	case "press":
+		return "follow"
+	case "hover":
+		return "highlight"
+	default:
+		return "stay"
+	}
+}
+
+// ConfirmResult waits for the declared expected result, highlights it,
+// and holds it visible for holdMs so the viewer can read causality.
+// It records a "result" visual event with bbox evidence and never fails
+// the record when the result is absent (QA reports it instead).
+func (b *PlaywrightBackend) ConfirmResult(t *storyboard.Target, holdMs int, label string) {
+	c := b.cine()
+	if !c.ConfirmationOn() || t == nil || t.Empty() {
+		b.spotlightHide()
+		b.calloutHide()
+		return
+	}
+	if holdMs <= 0 {
+		holdMs = c.Results.MinHoldMs
+	}
+	sel := selectorFor(t)
+	loc := b.page.Locator(sel)
+	waitMs := holdMs
+	if waitMs > 5000 {
+		waitMs = 5000
+	}
+	_ = loc.WaitFor(playwright.LocatorWaitForOptions{
+		State:   playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(float64(waitMs)),
+	})
+	bb, ok := b.bboxOf(sel)
+	start := b.nowMs()
+	if ok {
+		b.eval(visual.HighlightJS(bb, holdMs+400))
+		if c.SpotlightOn() {
+			b.spotlightShow(bb)
+		}
+	}
+	time.Sleep(time.Duration(holdMs) * time.Millisecond)
+	b.spotlightHide()
+	b.calloutHide()
+	ev := visual.VisualEvent{
+		Type: "result", Interaction: "result",
+		StartedAtMs: start, EndedAtMs: b.nowMs(), DurationMs: b.nowMs() - start,
+		ResultHoldMs: holdMs,
+	}
+	if ok {
+		ev.BBox = &bb
+		ev.NormBBox = visual.NormBBox(bb, b.vw, b.vh)
+	}
+	b.recordV("result", label, ev)
 }
 
 func (b *PlaywrightBackend) DoSpeech(speechID string, durationMs int64) (ActionResult, error) {

@@ -42,6 +42,10 @@ type CaptureBackend interface {
 	DoSpeech(speechID string, durationMs int64) (ActionResult, error)
 	// DoHold reserves a hold window in the capture.
 	DoHold(durationMs int64) (ActionResult, error)
+	// ConfirmResult waits for the declared expected result, highlights it
+	// and holds it visible (action/result/confirmation). Never fails the
+	// record; QA reports absent results.
+	ConfirmResult(t *storyboard.Target, holdMs int, label string)
 	// DoPause inserts a small intentional pacing gap (narration padding).
 	DoPause(ms int64, label string) (ActionResult, error)
 	// SaveStorageState snapshots cookies/localStorage for setup reuse.

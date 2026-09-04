@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pedro-dalben/autodoc/internal/capture"
+	"github.com/pedro-dalben/autodoc/internal/cinematic"
 	"github.com/pedro-dalben/autodoc/internal/config"
 	"github.com/pedro-dalben/autodoc/internal/media"
 	"github.com/pedro-dalben/autodoc/internal/recipe"
@@ -27,6 +28,7 @@ type Run struct {
 	Recipe     *recipe.Recipe
 	Timeline   *timeline.Timeline
 	Final      *timeline.FinalTimeline
+	Cinematic  *cinematic.Bundle
 	WorkDir    string
 	RunID      string
 }
@@ -352,6 +354,8 @@ func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName strin
 		return capture.Artifact{}, err
 	}
 	vis := r.SB.VisualsOrDefault()
+	cine := r.SB.CinematicOrDefault()
+	vis.Cinematic = cine
 	opts := capture.StartOptions{
 		SceneID: sceneID, ViewportW: vw, ViewportH: vh, Headless: headless,
 		BaseURL:  firstNonEmpty(r.SB.Config.BaseURL, cfg.TTS.BaseURL),
@@ -425,12 +429,29 @@ func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName strin
 				return capture.Artifact{}, fmt.Errorf("scene %s action %s: %w", sceneID, it.st.Action.Type, err)
 			}
 			emit("action", it.st.Action.Type)
+			// Action -> result -> confirmation: declared expected
+			// results are waited on, highlighted and held on camera.
+			if it.st.Action.ResultTarget != nil && !it.st.Action.ResultTarget.Empty() {
+				holdMs := cine.Results.MinHoldMs
+				if it.st.Action.ResultHoldMs != nil && *it.st.Action.ResultHoldMs > 0 {
+					holdMs = *it.st.Action.ResultHoldMs
+				}
+				be.ConfirmResult(it.st.Action.ResultTarget, holdMs, "result-of:"+it.st.Action.Type)
+				emit("result", "result-of:"+it.st.Action.Type)
+			}
 		case recipe.StepWait:
 			if _, err := be.DoWait(*it.st.Wait); err != nil {
 				return capture.Artifact{}, err
 			}
 			emit("wait", it.st.Wait.State)
 		case recipe.StepSpeech:
+			// Authored pauses ride the narration clock without touching
+			// the TTS text (pacing is orchestration, never rewriting).
+			if it.st.PauseBeforeMs > 0 {
+				if _, err := be.DoPause(int64(it.st.PauseBeforeMs), "pause-before-speech"); err != nil {
+					return capture.Artifact{}, err
+				}
+			}
 			ms, ok := speechMs[it.st.SpeechID]
 			if !ok || ms <= 0 {
 				ms = int64(tts.EstimateDuration(it.st.Text, cfg.TTS.Speed)*1000 + 0.5)
@@ -439,6 +460,11 @@ func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName strin
 				return capture.Artifact{}, err
 			}
 			emit("speech", it.st.SpeechID)
+			if it.st.PauseAfterMs > 0 {
+				if _, err := be.DoPause(int64(it.st.PauseAfterMs), "pause-after-speech"); err != nil {
+					return capture.Artifact{}, err
+				}
+			}
 		case recipe.StepHold:
 			if _, err := be.DoHold(int64(it.st.HoldMs)); err != nil {
 				return capture.Artifact{}, err
