@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pedro-dalben/autodoc/internal/agent"
@@ -12,6 +13,7 @@ import (
 	"github.com/pedro-dalben/autodoc/internal/doctor"
 	"github.com/pedro-dalben/autodoc/internal/evidence"
 	"github.com/pedro-dalben/autodoc/internal/mcp"
+	"github.com/pedro-dalben/autodoc/internal/storyboard"
 	"github.com/pedro-dalben/autodoc/internal/ui"
 	"github.com/pedro-dalben/autodoc/internal/usage"
 	"github.com/spf13/cobra"
@@ -303,7 +305,7 @@ func newContextCmd() *cobra.Command {
 func newAgentCmd() *cobra.Command {
 	var goal, storyboardPath string
 	c := &cobra.Command{Use: "agent", Short: "Compact task-specific protocol for coding agents"}
-	c.AddCommand(&cobra.Command{
+	boot := &cobra.Command{
 		Use: "bootstrap", Short: "Show existing knowledge and only the next workflow steps",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, _ := os.Getwd()
@@ -321,10 +323,61 @@ func newAgentCmd() *cobra.Command {
 			fmt.Fprint(cmd.OutOrStdout(), agent.Bootstrap(root, goal, sbPath))
 			return nil
 		},
-	})
-	boot := c.Commands()[0]
+	}
 	boot.Flags().StringVar(&goal, "goal", "", "user tutorial request")
 	boot.Flags().StringVar(&storyboardPath, "storyboard", "", "existing storyboard path")
+	var flow, capsuleStoryboard string
+	var sources []string
+	create := &cobra.Command{Use: "capsule-create", Short: "Save a compact warm-run capsule", RunE: func(cmd *cobra.Command, args []string) error {
+		if flow == "" || capsuleStoryboard == "" {
+			return fmt.Errorf("--flow and --storyboard are required")
+		}
+		root, _, sbPath, err := resolveFromCwd(capsuleStoryboard)
+		if err != nil {
+			return err
+		}
+		sb, err := storyboard.LoadFile(sbPath)
+		if err != nil {
+			return err
+		}
+		for i, source := range sources {
+			if !filepath.IsAbs(source) {
+				sources[i] = filepath.Join(root, source)
+			}
+		}
+		capsule, err := agent.NewCapsule(flow, sb, sources)
+		if err != nil {
+			return err
+		}
+		path, err := agent.SaveCapsule(filepath.Join(root, ".autodoc", "cache", "capsules"), capsule)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "capsule: saved %s\n", path)
+		return nil
+	}}
+	create.Flags().StringVar(&flow, "flow", "", "stable flow name")
+	create.Flags().StringVar(&capsuleStoryboard, "storyboard", "", "storyboard path")
+	create.Flags().StringSliceVar(&sources, "source", nil, "relevant source file (repeatable)")
+	var capsulePath string
+	status := &cobra.Command{Use: "capsule-status", Short: "Report whether a capsule's relevant sources changed", RunE: func(cmd *cobra.Command, args []string) error {
+		if capsulePath == "" {
+			return fmt.Errorf("--capsule is required")
+		}
+		capsule, err := agent.LoadCapsule(capsulePath)
+		if err != nil {
+			return err
+		}
+		changed := capsule.ChangedSources()
+		if len(changed) == 0 {
+			fmt.Fprintln(cmd.OutOrStdout(), "capsule: REUSE")
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "capsule: REVALIDATE\nchanged: %s\n", strings.Join(changed, ", "))
+		}
+		return nil
+	}}
+	status.Flags().StringVar(&capsulePath, "capsule", "", "capsule JSON path")
+	c.AddCommand(boot, create, status)
 	return c
 }
 

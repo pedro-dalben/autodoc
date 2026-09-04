@@ -15,6 +15,22 @@ For a new tutorial, use this order: existing artifacts, narrow route search,
 cinematic validation. For a change, inspect the git/UI delta, patch the affected
 scene, and retake it. Do not rediscover a tutorial merely to render or export.
 
+## Warm-run capsules
+
+Create a flow capsule after a validated discovery:
+
+```sh
+autodoc agent capsule-create --flow chat-send --storyboard storyboard.yml \
+  --source app/views/chat/_composer.html --source config/routes.rb
+autodoc agent capsule-status --capsule .autodoc/cache/capsules/chat-send.json
+```
+
+It stores the storyboard hash, stable target descriptions, and hashes only of
+the listed relevant source files. `REUSE` means a README or other unrelated
+change did not invalidate the flow; `REVALIDATE` lists the precise files that
+did change. Capsules contain no action values, cookies, credentials, or raw UI
+payloads.
+
 ## Browser evidence
 
 `autodoc ui query --url URL --intent "send message"` returns only ranked,
