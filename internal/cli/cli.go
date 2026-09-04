@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pedro-dalben/autodoc/internal/cinematic"
 	"github.com/pedro-dalben/autodoc/internal/config"
 	"github.com/pedro-dalben/autodoc/internal/doctor"
 	"github.com/pedro-dalben/autodoc/internal/harness"
@@ -752,6 +753,7 @@ func newValidateCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				_ = cinematic.WriteBundle(run.WorkDir, bundle)
 				fmt.Fprint(cmd.OutOrStdout(), bundle.Report.Print())
 				if !bundle.Report.Pass {
 					return fmt.Errorf("cinematic check FAILED")
