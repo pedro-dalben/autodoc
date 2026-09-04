@@ -10,7 +10,7 @@ import (
 func main() {
 	root := cli.NewRoot()
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, cli.FormatError(err))
 		os.Exit(1)
 	}
 }
