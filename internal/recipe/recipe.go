@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/pedro-dalben/autodoc/internal/storyboard"
 	"github.com/pedro-dalben/autodoc/internal/version"
@@ -61,9 +63,10 @@ type StepPlan struct {
 }
 
 type SpeechSegment struct {
-	ID   string `json:"id"`
-	Text string `json:"text"`
-	Hash string `json:"hash"`
+	ID    string `json:"id"`
+	Text  string `json:"text"`
+	Voice string `json:"voice,omitempty"`
+	Hash  string `json:"hash"`
 }
 
 func SpeechHash(text, voice, model, language string, speed float64) string {
@@ -73,16 +76,17 @@ func SpeechHash(text, voice, model, language string, speed float64) string {
 }
 
 func Compile(sb *storyboard.Storyboard, ttsModel, ttsVoice, ttsLang string, ttsSpeed float64) *Recipe {
+	execKey := ExecKey(sb, ttsModel, ttsVoice, ttsLang, ttsSpeed)
 	r := &Recipe{
 		SchemaVersion:  version.StoryboardSchemaVer,
-		StoryboardHash: sb.SourceHash(),
+		StoryboardHash: sb.SourceHash(execKey),
 		Meta:           sb.Meta,
 		Config:         sb.Config,
 		Redact:         sb.Redact,
 	}
 	globalIdx := 0
 	for _, sc := range sb.Scenes {
-		sp := ScenePlan{ID: sc.ID, Title: sc.Title, URL: sc.URL, Screenshot: sc.Screenshot, SceneHash: sc.SceneHash()}
+		sp := ScenePlan{ID: sc.ID, Title: sc.Title, URL: sc.URL, Screenshot: sc.Screenshot, SceneHash: sc.SceneHash(execKey)}
 		if sc.URL != "" && len(sp.SetupPrefix) == 0 {
 			_ = globalIdx
 		}
@@ -96,9 +100,10 @@ func Compile(sb *storyboard.Storyboard, ttsModel, ttsVoice, ttsLang string, ttsS
 					speechIdx++
 					bp.Steps = append(bp.Steps, StepPlan{Kind: StepSpeech, Index: len(bp.Steps), SpeechID: sid, Text: ev.Speech.Text, PauseBeforeMs: ev.Speech.PauseBeforeMs, PauseAfterMs: ev.Speech.PauseAfterMs, SpeechAnchor: ev.Speech.Anchor})
 					r.SpeechSegments = append(r.SpeechSegments, SpeechSegment{
-						ID:   sid,
-						Text: ev.Speech.Text,
-						Hash: SpeechHash(ev.Speech.Text, firstNonEmpty(ev.Speech.Voice, ttsVoice), ttsModel, ttsLang, ttsSpeed),
+						ID:    sid,
+						Text:  ev.Speech.Text,
+						Voice: firstNonEmpty(ev.Speech.Voice, ttsVoice),
+						Hash:  SpeechHash(ev.Speech.Text, firstNonEmpty(ev.Speech.Voice, ttsVoice), ttsModel, ttsLang, ttsSpeed),
 					})
 				case ev.Action != nil:
 					a := *ev.Action
@@ -115,6 +120,22 @@ func Compile(sb *storyboard.Storyboard, ttsModel, ttsVoice, ttsLang string, ttsS
 		r.Scenes = append(r.Scenes, sp)
 	}
 	return r
+}
+
+// ExecKey binds the execution clock to content hashes. Raw capture runs on
+// the narration clock (DoSpeech reserves TTS windows), and redaction applies
+// at capture time, so TTS identity + redaction participate in both the
+// run-level and per-scene reuse keys. A voice/model/speed change re-records
+// instead of reusing footage paced on old narration; a redact change never
+// reuses pre-redaction video.
+func ExecKey(sb *storyboard.Storyboard, ttsModel, ttsVoice, ttsLang string, ttsSpeed float64) string {
+	sel := append([]string{}, sb.Redact.Selectors...)
+	sort.Strings(sel)
+	mask := "maskpwd=false"
+	if sb.Redact.MaskPasswordInputs {
+		mask = "maskpwd=true"
+	}
+	return fmt.Sprintf("tts|%s|%s|%s|%.3f|redact|%s|%s", ttsModel, ttsVoice, ttsLang, ttsSpeed, mask, strings.Join(sel, ","))
 }
 
 func firstNonEmpty(a, b string) string {

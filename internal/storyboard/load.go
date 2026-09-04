@@ -49,9 +49,13 @@ func LoadFile(path string) (*Storyboard, error) {
 	return &sb, nil
 }
 
-func (s *Storyboard) SourceHash() string {
+func (s *Storyboard) SourceHash(extra ...string) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "v2|%d|%s|%s|%s|%dx%d|%s|", s.Version, s.Meta.Title, s.Meta.Language, s.Config.BaseURL, s.Config.ViewportW, s.Config.ViewportH, s.Setup.StartURL)
+	fmt.Fprintf(h, "redact:%s|", redactKey(s.Redact))
+	if len(extra) > 0 && extra[0] != "" {
+		fmt.Fprintf(h, "exec:%s|", extra[0])
+	}
 	if s.Visuals != nil {
 		fmt.Fprintf(h, "visuals:%+v|", *s.Visuals)
 	}
@@ -77,7 +81,7 @@ func (s *Storyboard) SourceHash() string {
 		}
 	}
 	for _, sc := range s.Scenes {
-		fmt.Fprintf(h, "scene:%s|%s|", sc.ID, sc.URL)
+		fmt.Fprintf(h, "scene:%s|%s|%s|%t|", sc.ID, sc.URL, sc.Title, sc.Screenshot)
 		for _, b := range sc.Beats {
 			fmt.Fprintf(h, "beat:%s|", b.ID)
 			for _, ev := range b.Sequence {
@@ -110,9 +114,12 @@ func targetKey(t *Target) string {
 // its ID, URL, targets, beats, actions, speech, waits, and holds. If a different
 // scene in the storyboard changes, this scene's hash remains unchanged, enabling
 // granular rebuild and safe video reuse across retakes.
-func (sc *Scene) SceneHash() string {
+func (sc *Scene) SceneHash(extra ...string) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "scene:%s|%s|%t|%s|%s|", sc.ID, sc.URL, sc.Screenshot, sc.Camera, sc.Attention)
+	fmt.Fprintf(h, "scene:%s|%s|%s|%t|%s|%s|", sc.ID, sc.URL, sc.Title, sc.Screenshot, sc.Camera, sc.Attention)
+	if len(extra) > 0 && extra[0] != "" {
+		fmt.Fprintf(h, "exec:%s|", extra[0])
+	}
 	var targetNames []string
 	for k := range sc.Targets {
 		targetNames = append(targetNames, k)
@@ -140,6 +147,15 @@ func (sc *Scene) SceneHash() string {
 	}
 	sum := h.Sum(nil)
 	return hex.EncodeToString(sum)[:16]
+}
+
+// redactKey renders the redaction block deterministically for hashing.
+// Redaction applies at capture time, so any selector change must
+// invalidate reused raw video (never reuse pre-redaction footage).
+func redactKey(r Redact) string {
+	sel := append([]string{}, r.Selectors...)
+	sort.Strings(sel)
+	return fmt.Sprintf("maskpwd=%t,sel=%s", r.MaskPasswordInputs, strings.Join(sel, ","))
 }
 
 func boolKey(v *bool) string {
