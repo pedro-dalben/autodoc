@@ -70,13 +70,9 @@ func (s *Storyboard) SourceHash() string {
 	for _, st := range s.Setup.Sequence {
 		switch {
 		case st.Action != nil:
-			t := ""
-			if st.Action.Target != nil {
-				t = st.Action.Target.PlaywrightSelector()
-			}
-			fmt.Fprintf(h, "setup-action:%s|%s|%s|secret:%t|", st.Action.Type, t, st.Action.URL, st.Action.SecretRef != "")
+			fmt.Fprintf(h, "setup-action:%s|%s|%s|%s|%s|%s|secret:%t|", st.Action.Type, targetKey(st.Action.Target), st.Action.URL, st.Action.Text, st.Action.Value, st.Action.Key, st.Action.SecretRef != "")
 		case st.Wait != nil:
-			fmt.Fprintf(h, "setup-wait:%s|%s|%d|%d|", st.Wait.State, st.Wait.URL, st.Wait.TimeoutMs, st.Wait.SettleMs)
+			fmt.Fprintf(h, "setup-wait:%s|%s|%s|%s|%d|%d|%t|", st.Wait.State, targetKey(st.Wait.Target), st.Wait.URL, st.Wait.Value, st.Wait.TimeoutMs, st.Wait.SettleMs, st.Wait.IsCompressible())
 		}
 	}
 	for _, sc := range s.Scenes {
@@ -86,15 +82,12 @@ func (s *Storyboard) SourceHash() string {
 			for _, ev := range b.Sequence {
 				switch {
 				case ev.Speech != nil:
-					fmt.Fprintf(h, "speech:%s|%s|", ev.Speech.Text, ev.Speech.Voice)
+					fmt.Fprintf(h, "speech:%s|%s|%d|%d|%s|", ev.Speech.Text, ev.Speech.Voice, ev.Speech.PauseBeforeMs, ev.Speech.PauseAfterMs, ev.Speech.Anchor)
 				case ev.Action != nil:
-					t := ""
-					if ev.Action.Target != nil {
-						t = ev.Action.Target.PlaywrightSelector()
-					}
-					fmt.Fprintf(h, "action:%s|%s|%s|%s|%s|%s|secret:%t|", ev.Action.Type, t, ev.Action.URL, ev.Action.Text, ev.Action.Value, ev.Action.Key, ev.Action.SecretRef != "")
+					a := ev.Action
+					fmt.Fprintf(h, "action:%s|%s|%s|%s|%s|%s|secret:%t|instant:%s|zoom:%s|camera:%s|att:%s|result:%s|hold:%s|call:%s|anticipation:%s|", a.Type, targetKey(a.Target), a.URL, a.Text, a.Value, a.Key, a.SecretRef != "", boolKey(a.Instant), boolKey(a.NoZoom), a.Camera, a.Attention, targetKey(a.ResultTarget), intKey(a.ResultHoldMs), a.Callout, boolKey(a.NoAnticipation))
 				case ev.Wait != nil:
-					fmt.Fprintf(h, "wait:%s|%s|%s|%d|%d|", ev.Wait.State, ev.Wait.URL, ev.Wait.Value, ev.Wait.TimeoutMs, ev.Wait.SettleMs)
+					fmt.Fprintf(h, "wait:%s|%s|%s|%s|%d|%d|%t|", ev.Wait.State, targetKey(ev.Wait.Target), ev.Wait.URL, ev.Wait.Value, ev.Wait.TimeoutMs, ev.Wait.SettleMs, ev.Wait.IsCompressible())
 				case ev.Hold != nil:
 					fmt.Fprintf(h, "hold:%d|", ev.Hold.DurationMs)
 				}
@@ -103,6 +96,30 @@ func (s *Storyboard) SourceHash() string {
 	}
 	sum := h.Sum(nil)
 	return hex.EncodeToString(sum)[:16]
+}
+
+func targetKey(t *Target) string {
+	if t == nil {
+		return ""
+	}
+	return fmt.Sprintf("ref=%s,test=%s,role=%s,name=%s,label=%s,text=%s,css=%s", t.Ref, t.TestID, t.Role, t.Name, t.Label, t.Text, t.CSS)
+}
+
+func boolKey(v *bool) string {
+	if v == nil {
+		return "unset"
+	}
+	if *v {
+		return "true"
+	}
+	return "false"
+}
+
+func intKey(v *int) string {
+	if v == nil {
+		return "unset"
+	}
+	return fmt.Sprintf("%d", *v)
 }
 
 func WriteExample(path string) error {

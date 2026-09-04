@@ -1,6 +1,7 @@
 package storyboard_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pedro-dalben/autodoc/internal/recipe"
@@ -56,5 +57,29 @@ scenes:
 `
 	if _, err := storyboard.LoadFile(writeTmp(t, yml)); err == nil {
 		t.Fatal("unknown alias must fail")
+	}
+}
+
+func TestSourceHashIncludesExecutionRelevantCompactDefaults(t *testing.T) {
+	base := `version: 2
+meta: {title: "T", language: "pt-BR"}
+config: {base_url: "http://localhost:3000"}
+scenes:
+  - id: s
+    title: "S"
+    targets: {send: {role: button, name: Enviar}}
+    defaults: {wait_timeout_ms: %d}
+    beats: [{id: b, sequence: [{wait: {state: visible, target: send}}]}]
+`
+	a, err := storyboard.LoadFile(writeTmp(t, fmt.Sprintf(base, 1000)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := storyboard.LoadFile(writeTmp(t, fmt.Sprintf(base, 2000)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.SourceHash() == b.SourceHash() {
+		t.Fatal("different expanded defaults must invalidate the hash")
 	}
 }
