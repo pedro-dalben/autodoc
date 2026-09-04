@@ -81,6 +81,9 @@ type BeatPlan struct {
 	Anchor      VisualAnchor `json:"anchor"`
 	ActionType  string       `json:"action_type,omitempty"`
 	ActionLabel string       `json:"action_label,omitempty"`
+	// ActionSelector is the Playwright selector form ("[data-testid=x]");
+	// reconciled segment labels carry it, enabling exact correlation.
+	ActionSelector string `json:"action_selector,omitempty"`
 	// ExpectedResult carries the declared or inferred result target.
 	ExpectedResult string `json:"expected_result,omitempty"`
 	// NeedsAnticipation marks beats where pre-action direction applies.
@@ -214,16 +217,31 @@ func indexBeats(beats []BeatPlan) map[string][]BeatPlan {
 }
 
 // beatForAction resolves the semantic beat for an action segment.
-func beatForAction(idx map[string][]BeatPlan, scene, beat, actionType string) BeatPlan {
-	for _, b := range idx[beatKey(scene, beat)] {
-		if b.ActionType == actionType {
+// Segments carry the Playwright selector form in their label, so exact
+// selector matches win; a verb-only fallback applies solely when the
+// verb is unique within the beat (never attributing one beat's result
+// to a sibling action).
+func beatForAction(idx map[string][]BeatPlan, scene, beat, label string) BeatPlan {
+	verb := label
+	if i := strings.Index(verb, " "); i > 0 {
+		verb = verb[:i]
+	}
+	cands := idx[beatKey(scene, beat)]
+	for _, b := range cands {
+		if b.ActionSelector == label {
 			return b
 		}
 	}
-	for _, b := range idx[beatKey(scene, beat)] {
-		if b.ActionType != "" {
-			return b
+	var verbHit *BeatPlan
+	n := 0
+	for i, b := range cands {
+		if b.ActionType == verb {
+			n++
+			verbHit = &cands[i]
 		}
+	}
+	if n == 1 {
+		return *verbHit
 	}
 	return BeatPlan{}
 }
@@ -236,6 +254,18 @@ func beatForSpeech(idx map[string][]BeatPlan, scene, beat, speechID string) Beat
 		}
 	}
 	return BeatPlan{}
+}
+
+// selectorOf mirrors the capture backend's selector resolution so the
+// scene plan carries the exact label form the reconciler emits.
+func selectorOf(a *storyboard.Action) string {
+	if a == nil || a.Target == nil {
+		if a != nil && a.URL != "" {
+			return a.URL
+		}
+		return "body"
+	}
+	return a.Target.PlaywrightSelector()
 }
 
 // IntentFor renders a short human intent line for a beat.
@@ -330,7 +360,7 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 				// context without rewriting content.
 				narration = next.Text
 			}
-			actionType, actionLabel := "", ""
+			actionType, actionLabel, actionSelector := "", "", ""
 			callout := ""
 			camOv, attOv := sceneCam[sc.ID], sceneAtt[sc.ID]
 			expResult := ""
@@ -341,6 +371,7 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 				if st.Action.Target != nil {
 					actionLabel += " " + st.Action.Target.Describe()
 				}
+				actionSelector = st.Action.Type + " " + selectorOf(st.Action)
 				callout = st.Action.Callout
 				if st.Action.Camera != "" {
 					camOv = st.Action.Camera
@@ -362,6 +393,7 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 				Type: bt, Intent: IntentFor(bt, narration, actionLabel),
 				Narration: narration, SpeechID: speechID, Anchor: anchor,
 				ActionType: actionType, ActionLabel: actionLabel,
+				ActionSelector:    actionSelector,
 				ExpectedResult:    expResult,
 				NeedsAnticipation: st.Kind == recipe.StepAction && (actionType == "click" || actionType == "fill" || actionType == "type" || actionType == "select" || actionType == "press"),
 				NeedsConfirmation: needsConf,

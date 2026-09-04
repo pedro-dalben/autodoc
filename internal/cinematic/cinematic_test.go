@@ -300,3 +300,22 @@ func TestPlanScenesCompatibility(t *testing.T) {
 		t.Fatalf("speech borrows click anchor: %+v", doc.Beats[0])
 	}
 }
+
+func TestBeatSelectorDisambiguation(t *testing.T) {
+	r := &recipe.Recipe{StoryboardHash: "h", Scenes: []recipe.ScenePlan{
+		{ID: "s", Beats: []recipe.BeatPlan{{ID: "b", Steps: []recipe.StepPlan{
+			{Kind: recipe.StepAction, Action: &storyboard.Action{Type: "click", Target: &storyboard.Target{TestID: "open"}, ResultTarget: &storyboard.Target{TestID: "panel"}}},
+			{Kind: recipe.StepAction, Action: &storyboard.Action{Type: "click", Target: &storyboard.Target{TestID: "close"}}},
+		}}}},
+	}}
+	doc := PlanScenes(r, nil)
+	idx := indexBeats(doc.Beats)
+	got := beatForAction(idx, "s", "b", `click [data-testid="close"]`)
+	if got.ActionLabel == "" || got.NeedsConfirmation {
+		t.Fatalf("sibling click must not inherit confirmation: %+v", got)
+	}
+	got = beatForAction(idx, "s", "b", `click [data-testid="open"]`)
+	if !got.NeedsConfirmation {
+		t.Fatalf("declared result beat must confirm: %+v", got)
+	}
+}

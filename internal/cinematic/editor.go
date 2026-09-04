@@ -148,18 +148,10 @@ func BuildEditPlan(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.Cine
 		return se
 	}
 	idx := indexBeats(beats)
-	// actionTypeOf extracts the verb ("click", "fill", …) from a
-	// reconciled label ("click [data-testid=…]").
-	actionTypeOf := func(label string) string {
-		if i := strings.Index(label, " "); i > 0 {
-			return label[:i]
-		}
-		return label
-	}
 	beatOf := func(sg timeline.AVSegment) BeatPlan {
 		switch sg.Kind {
 		case "action":
-			return beatForAction(idx, sg.SceneID, sg.BeatID, actionTypeOf(sg.Label))
+			return beatForAction(idx, sg.SceneID, sg.BeatID, sg.Label)
 		case "speech":
 			return beatForSpeech(idx, sg.SceneID, sg.BeatID, sg.Label)
 		default:
@@ -222,14 +214,8 @@ func EnsureResultHolds(ft *timeline.FinalTimeline, beats []BeatPlan, cfg visual.
 	}
 	added := 0
 	idx := indexBeats(beats)
-	actionTypeOf := func(label string) string {
-		if i := strings.Index(label, " "); i > 0 {
-			return label[:i]
-		}
-		return label
-	}
 	need := func(sg timeline.AVSegment) (int, bool) {
-		b := beatForAction(idx, sg.SceneID, sg.BeatID, actionTypeOf(sg.Label))
+		b := beatForAction(idx, sg.SceneID, sg.BeatID, sg.Label)
 		if b.NeedsConfirmation {
 			return cfg.Results.MinHoldMs, true
 		}

@@ -2,7 +2,6 @@ package cinematic
 
 import (
 	"math"
-	"strings"
 
 	"github.com/pedro-dalben/autodoc/internal/timeline"
 	"github.com/pedro-dalben/autodoc/internal/visual"
@@ -94,12 +93,8 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 			}
 			return -1
 		}
-		verb := sg.Label
-		if i := strings.Index(verb, " "); i > 0 {
-			verb = verb[:i]
-		}
 		for i, b := range beats {
-			if b.SceneID == sg.SceneID && b.BeatID == sg.BeatID && b.ActionType == verb {
+			if b.SceneID == sg.SceneID && b.BeatID == sg.BeatID && b.ActionSelector == sg.Label {
 				return i
 			}
 		}
