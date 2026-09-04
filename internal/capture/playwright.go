@@ -599,6 +599,15 @@ func (b *PlaywrightBackend) doPress(a storyboard.Action, start int64) (ActionRes
 		b.emitInteraction("press", bb, target, ok, start, focusAt, b.nowMs(), a)
 	} else if err := b.page.Keyboard().Press(key); err != nil {
 		return ActionResult{}, fmt.Errorf("press %s: %w", key, err)
+	} else {
+		// Target-less keypresses still emit evidence so the reconciler
+		// never estimates their window (keyboard dismissals, Enter).
+		end := b.nowMs()
+		b.recordV("visual", "press "+key, visual.VisualEvent{
+			Type: "interaction", Interaction: "press",
+			StartedAtMs: start, FocusAtMs: start, ActionAtMs: end, EndedAtMs: end,
+			Zoom: 1,
+		})
 	}
 	b.record("action", "press "+key)
 	return ActionResult{AtMs: start, ElapsedMs: b.nowMs() - start}, nil
