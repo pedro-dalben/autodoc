@@ -606,7 +606,7 @@ func (b *PlaywrightBackend) doPress(a storyboard.Action, start int64) (ActionRes
 		b.recordV("visual", "press "+key, visual.VisualEvent{
 			Type: "interaction", Interaction: "press",
 			StartedAtMs: start, FocusAtMs: start, ActionAtMs: end, EndedAtMs: end,
-			Zoom: 1,
+			Zoom: 1, Keyboard: true,
 		})
 	}
 	b.record("action", "press "+key)

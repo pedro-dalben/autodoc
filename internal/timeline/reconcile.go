@@ -49,6 +49,7 @@ type AVSegment struct {
 	WavPath      string       `json:"wav_path,omitempty"`
 	Zoom         float64      `json:"zoom,omitempty"`
 	NormBBox     *visual.BBox `json:"norm_bbox,omitempty"`
+	Keyboard     bool         `json:"keyboard,omitempty"`
 	Compressed   bool         `json:"compressed,omitempty"`
 	Estimated    bool         `json:"estimated,omitempty"`
 	Compressible bool         `json:"compressible"`
@@ -218,6 +219,7 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 			case "action":
 				var vw0, vw1 float64
 				est := true
+				keyboardSeg := false
 				var zoom float64 = 1
 				var nb *visual.BBox
 				label := ps.label
@@ -242,6 +244,9 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 					typeCursor[ps.actionType]++
 					vw0, vw1, zoom, nb, label, est = interactionWindow(e, t0)
 					actionAt = actionAtS(e, t0)
+					if e.Visual != nil && e.Visual.Keyboard {
+						keyboardSeg = true
+					}
 				} else if ps.actionType == "goto" || ps.actionType == "expect" || ps.actionType == "screenshot" || ps.actionType == "scroll" || ps.actionType == "reload" || ps.actionType == "goback" {
 					vw0 = out - sceneStart + videoOffsetGuess(events, t0)
 					vw1 = vw0 + 0.5
@@ -262,6 +267,7 @@ func Reconcile(planned *Timeline, rec *recipe.Recipe, sceneEvents map[string][]A
 					SceneID: sc.ID, BeatID: ps.beat, Kind: "action", Label: label,
 					StartS: out, DurS: dur, VideoStartS: vw0, VideoEndS: vw1,
 					Speed: 1, Zoom: zoom, NormBBox: nb, Estimated: est, ActionAtS: actionAt,
+					Keyboard: keyboardSeg,
 				})
 				if !est {
 					overlap := rangeOverlap(vw0, vw1, speechVideo)

@@ -502,6 +502,7 @@ type VisualEvent struct {
 	CompressedTo   float64 `json:"compressed_to_s,omitempty"`
 	// Cinematic V2 direction evidence (all optional, V1 readers ignore).
 	Anticipated  bool   `json:"anticipated,omitempty"`
+	Keyboard     bool   `json:"keyboard,omitempty"`
 	Attention    string `json:"attention,omitempty"`
 	Spotlight    bool   `json:"spotlight,omitempty"`
 	Callout      string `json:"callout,omitempty"`

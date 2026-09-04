@@ -145,10 +145,11 @@ func RunQA(ft *timeline.FinalTimeline, scenes *ScenePlanDoc, att *AttentionPlan,
 	gate("context-restoration", restored, fmt.Sprintf("context restore planned: %t", restored), fmt.Sprint(restored), "true")
 
 	// 9. Target visibility: every action segment carries bbox evidence
-	// and (when zoomed) respected the safe frame.
+	// and (when zoomed) respected the safe frame. Keyboard-only
+	// presses (Escape/Enter/Tab) have no target by construction.
 	missing, unsafe := 0, 0
 	for _, sg := range ft.Segments {
-		if sg.Kind != "action" {
+		if sg.Kind != "action" || sg.Keyboard {
 			continue
 		}
 		if sg.NormBBox == nil {
