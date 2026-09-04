@@ -11,6 +11,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// UnmarshalYAML accepts both the long locator object and the compact scalar
+// alias used by scene.targets. Expansion and alias validation happen later.
+func (t *Target) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		t.Ref = value.Value
+		return nil
+	}
+	type plain Target
+	var v plain
+	if err := value.Decode(&v); err != nil {
+		return err
+	}
+	*t = Target(v)
+	return nil
+}
+
 func LoadFile(path string) (*Storyboard, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

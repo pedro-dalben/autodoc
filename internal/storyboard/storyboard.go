@@ -67,6 +67,17 @@ type Scene struct {
 	// Optional V2 overrides for special situations (default: semantic).
 	Camera    string `yaml:"camera,omitempty" json:"camera,omitempty"`
 	Attention string `yaml:"attention,omitempty" json:"attention,omitempty"`
+	// Targets and Defaults are optional compact-authoring helpers. They expand
+	// in memory before validation/compilation, so V1/V2 recipes stay unchanged.
+	Targets  map[string]Target `yaml:"targets,omitempty" json:"targets,omitempty"`
+	Defaults SceneDefaults     `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+}
+
+type SceneDefaults struct {
+	WaitTimeoutMs int   `yaml:"wait_timeout_ms,omitempty" json:"wait_timeout_ms,omitempty"`
+	ResultHoldMs  *int  `yaml:"result_hold_ms,omitempty" json:"result_hold_ms,omitempty"`
+	Compressible  *bool `yaml:"compressible,omitempty" json:"compressible,omitempty"`
+	Instant       *bool `yaml:"instant,omitempty" json:"instant,omitempty"`
 }
 
 type Beat struct {
@@ -129,6 +140,9 @@ type Action struct {
 }
 
 type Target struct {
+	// Ref is accepted as `target: alias` or `target: {ref: alias}` and resolved
+	// against Scene.Targets before the deterministic compiler sees the scene.
+	Ref    string `yaml:"ref,omitempty" json:"ref,omitempty"`
 	TestID string `yaml:"test_id,omitempty" json:"test_id,omitempty"`
 	Role   string `yaml:"role,omitempty" json:"role,omitempty"`
 	Name   string `yaml:"name,omitempty" json:"name,omitempty"`
@@ -188,6 +202,7 @@ var validWaitStates = map[string]bool{
 func (s *Storyboard) Validate() []error {
 	var errs []error
 	add := func(f string, a ...any) { errs = append(errs, fmt.Errorf(f, a...)) }
+	errs = append(errs, s.ExpandCompact()...)
 	if s.Version != 1 && s.Version != 2 {
 		add("version must be 1 or 2, got %d", s.Version)
 	}
@@ -328,6 +343,62 @@ func (s *Storyboard) Validate() []error {
 	return errs
 }
 
+// ExpandCompact resolves target aliases and applies scene defaults. It is
+// idempotent, intentionally local to a scene, and keeps the compiler's input
+// identical to the long-form schema.
+func (s *Storyboard) ExpandCompact() []error {
+	var errs []error
+	for si := range s.Scenes {
+		sc := &s.Scenes[si]
+		resolve := func(t **Target, where string) {
+			if *t == nil || (*t).Ref == "" {
+				return
+			}
+			name := (*t).Ref
+			v, ok := sc.Targets[name]
+			if !ok {
+				errs = append(errs, fmt.Errorf("scene %q %s: unknown target alias %q", sc.ID, where, name))
+				return
+			}
+			if v.Ref != "" {
+				errs = append(errs, fmt.Errorf("scene %q target alias %q must not reference another alias", sc.ID, name))
+				return
+			}
+			copy := v
+			*t = &copy
+		}
+		for bi := range sc.Beats {
+			for ei := range sc.Beats[bi].Sequence {
+				ev := &sc.Beats[bi].Sequence[ei]
+				where := fmt.Sprintf("beat %q sequence[%d]", sc.Beats[bi].ID, ei)
+				if ev.Action != nil {
+					resolve(&ev.Action.Target, where+" action")
+					resolve(&ev.Action.ResultTarget, where+" result_target")
+					if ev.Action.Instant == nil && sc.Defaults.Instant != nil {
+						v := *sc.Defaults.Instant
+						ev.Action.Instant = &v
+					}
+					if ev.Action.ResultHoldMs == nil && sc.Defaults.ResultHoldMs != nil {
+						v := *sc.Defaults.ResultHoldMs
+						ev.Action.ResultHoldMs = &v
+					}
+				}
+				if ev.Wait != nil {
+					resolve(&ev.Wait.Target, where+" wait")
+					if ev.Wait.TimeoutMs == 0 && sc.Defaults.WaitTimeoutMs != 0 {
+						ev.Wait.TimeoutMs = sc.Defaults.WaitTimeoutMs
+					}
+					if ev.Wait.Compressible == nil && sc.Defaults.Compressible != nil {
+						v := *sc.Defaults.Compressible
+						ev.Wait.Compressible = &v
+					}
+				}
+			}
+		}
+	}
+	return errs
+}
+
 func validateAction(a *Action, where string, errs *[]error) {
 	add := func(f string, args ...any) { *errs = append(*errs, fmt.Errorf(f, args...)) }
 	if !validActionTypes[a.Type] {
@@ -432,7 +503,7 @@ func (t *Target) Empty() bool {
 	if t == nil {
 		return true
 	}
-	return t.TestID == "" && t.Role == "" && t.Name == "" && t.Label == "" && t.Text == "" && t.CSS == ""
+	return t.Ref == "" && t.TestID == "" && t.Role == "" && t.Name == "" && t.Label == "" && t.Text == "" && t.CSS == ""
 }
 
 func (t *Target) Describe() string {

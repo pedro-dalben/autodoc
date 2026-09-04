@@ -62,6 +62,31 @@ Preference: `test_id` → `role`+accessible `name` → `label` → stable
 attribute → CSS. CSS-only locators emit a validation warning; DOM-position
 selectors (`:nth-child`, positional XPath) must not be used.
 
+### Compact aliases and scene defaults
+
+For repeated targets or settings, use scene-local aliases. AutoDoc expands
+these before validation and compilation, so generated recipes remain fully
+deterministic and older long-form storyboards behave exactly as before.
+
+```yaml
+scenes:
+  - id: chat
+    targets:
+      message: {label: "Mensagem"}
+      send: {role: button, name: Enviar}
+    defaults: {wait_timeout_ms: 8000, compressible: false}
+    beats:
+      - id: send-message
+        sequence:
+          - action: {type: fill, target: message, value: "Olá"}
+          - action: {type: click, target: send, result_target: send}
+          - wait: {state: visible, target: send}
+```
+
+`defaults` supports `wait_timeout_ms`, `compressible`, `instant`, and
+`result_hold_ms`; explicit event values always win. Aliases cannot reference
+other aliases, and unknown aliases fail validation.
+
 ## Waits
 
 `visible, hidden, attached, detached, networkidle, load, url, timeout, settle`,
