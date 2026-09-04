@@ -145,7 +145,10 @@ func RunQA(ft *timeline.FinalTimeline, scenes *ScenePlanDoc, att *AttentionPlan,
 	gate("context-restoration", restored, fmt.Sprintf("context restore planned: %t", restored), fmt.Sprint(restored), "true")
 
 	// 9. Target visibility: every action segment carries bbox evidence
-	// and (when zoomed) respected the safe frame. Keyboard-only
+	// and a zoomed crop respects the safe frame. Playwright may scroll a
+	// regular click into view after capture measured its document bbox; an
+	// unzoomed action therefore remains readable and must not fail the crop
+	// gate. Keyboard-only
 	// presses (Escape/Enter/Tab) have no target by construction.
 	missing, unsafe := 0, 0
 	for _, sg := range ft.Segments {
@@ -154,7 +157,7 @@ func RunQA(ft *timeline.FinalTimeline, scenes *ScenePlanDoc, att *AttentionPlan,
 		}
 		if sg.NormBBox == nil {
 			missing++
-		} else if !bboxSafe(sg.NormBBox) {
+		} else if sg.Zoom > 1.01 && !bboxSafe(sg.NormBBox) {
 			unsafe++
 		}
 	}

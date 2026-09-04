@@ -307,6 +307,20 @@ func TestQAAndScore(t *testing.T) {
 	}
 }
 
+func TestQAAllowsUnzoomedScrolledTarget(t *testing.T) {
+	cfg := testCfg()
+	ft := &timeline.FinalTimeline{StoryboardHash: "h", Sync: &timeline.SyncReport{Pass: true}, Segments: []timeline.AVSegment{
+		{SceneID: "s", Kind: "action", Label: "click below fold", Zoom: 1, NormBBox: nb(0.1, 1.1, 0.2, 0.1)},
+	}}
+	scenes := &ScenePlanDoc{StoryboardHash: "h"}
+	rep := RunQA(ft, scenes, &AttentionPlan{}, &CameraPlan{}, &EditPlan{}, nil, nil, cfg)
+	for _, gate := range rep.Gates {
+		if gate.Name == "target-visibility" && !gate.Pass {
+			t.Fatalf("unzoomed scrolled target must pass: %+v", gate)
+		}
+	}
+}
+
 func TestPlanScenesCompatibility(t *testing.T) {
 	r := &recipe.Recipe{StoryboardHash: "h", Scenes: []recipe.ScenePlan{
 		{ID: "s", Beats: []recipe.BeatPlan{{ID: "b", Steps: []recipe.StepPlan{
