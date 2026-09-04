@@ -39,7 +39,17 @@ func (s *Storyboard) SourceHash() string {
 		fmt.Fprintf(h, "visuals:%+v|", *s.Visuals)
 	}
 	if s.Cinematic != nil {
-		fmt.Fprintf(h, "cinematic:%+v|", *s.Cinematic)
+		// Explicit value formatting: %+v would print *bool pointer
+		// addresses and make the hash non-deterministic across loads.
+		c := *s.Cinematic
+		c.ApplyDefaults()
+		fmt.Fprintf(h, "cinematic:dir=%t|att=%t|spot=%t|dim=%.3f|cam-cont=%t|cam-restore=%t|maxzoom=%.3f|trans=%d|ant=%t|rev=%d|appr=%d|settle=%d|conf=%t|hold=%d|compress=%t|speed=%.2f|call=%t|maxcall=%d|snd=%t|click=%s|success=%s|typing=%t|qa=%d|%d|%d|",
+			c.DirectorOn(), c.AttentionOn(), c.SpotlightOn(), c.Attention.MaxDim,
+			c.ContinuityOn(), c.ContextRestoreOn(), c.Camera.MaxZoom, c.Camera.MinTransitionMs,
+			c.AnticipationOn(), c.Anticipation.RevealMs, c.Anticipation.ApproachMs, c.Anticipation.SettleMs,
+			c.ConfirmationOn(), c.Results.MinHoldMs, c.CompressOn(), c.Editing.MaxSpeed,
+			c.CalloutsOn(), c.Callouts.MaxPerScene, c.SoundOn(), c.Sound.Click, c.Sound.Success, c.Sound.Typing,
+			c.QA.MaxUnintentionalStaticMs, c.QA.MinTargetVisibleMs, c.QA.MinResultVisibleMs)
 	}
 	for _, st := range s.Setup.Sequence {
 		switch {

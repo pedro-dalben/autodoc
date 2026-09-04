@@ -59,6 +59,41 @@ func TestValidStoryboard(t *testing.T) {
 	}
 }
 
+func TestSourceHashDeterministic(t *testing.T) {
+	withCine := validSB + `cinematic:
+  director: true
+  attention: {enabled: true, spotlight: true}
+  camera: {continuity: true, max_zoom: 1.25}
+  callouts: {enabled: true}
+  sound: {enabled: false}
+`
+	p := writeTmp(t, withCine)
+	first, err := storyboard.LoadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h1 := first.SourceHash()
+	for i := 0; i < 3; i++ {
+		sb, err := storyboard.LoadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h := sb.SourceHash(); h != h1 {
+			t.Fatalf("non-deterministic hash: %s vs %s", h, h1)
+		}
+	}
+	// Distinct cinematic config must hash distinctly.
+	other, err := storyboard.LoadFile(writeTmp(t, validSB+`cinematic:
+  director: false
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := other.SourceHash(); h == h1 {
+		t.Fatal("cinematic config change must alter hash")
+	}
+}
+
 func TestRejectsPercentageTiming(t *testing.T) {
 	bad := `version: 1
 meta: {title: "T", language: "pt-BR"}
