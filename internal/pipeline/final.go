@@ -91,6 +91,9 @@ func (r *Run) BuildCinematic() (*cinematic.Bundle, error) {
 
 func (r *Run) loadSceneEvents(sceneID string) []capture.EventRecord {
 	cands := []string{filepath.Join(r.WorkDir, r.RunID, "events-"+sceneID+".jsonl")}
+	if srcDir := r.LatestRunDirWithSceneVideo(sceneID); srcDir != "" && srcDir != filepath.Join(r.WorkDir, r.RunID) {
+		cands = append(cands, filepath.Join(srcDir, "events-"+sceneID+".jsonl"))
+	}
 	entries, _ := filepath.Glob(filepath.Join(r.WorkDir, "*", "events-"+sceneID+".jsonl"))
 	sort.Strings(entries)
 	current := filepath.Join(r.WorkDir, r.RunID, "events-"+sceneID+".jsonl")

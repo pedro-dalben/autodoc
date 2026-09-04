@@ -276,19 +276,30 @@ func (r *Run) LatestRunDirWithHash() string {
 }
 
 // LatestRunDirWithSceneVideo returns the most recent run dir (excluding the
-// current run) whose recipe.json matches this run's storyboard hash AND that
-// contains raw/<sceneID>.webm (or .mp4). Empty string when none exists.
+// current run) whose recipe.json matches this run's storyboard hash (or
+// matches the individual scene's SceneHash) AND that contains raw/<sceneID>.webm
+// (or .mp4). Empty string when none exists.
 func (r *Run) LatestRunDirWithSceneVideo(sceneID string) string {
 	current := filepath.Join(r.WorkDir, r.RunID)
 	entries, _ := filepath.Glob(filepath.Join(r.WorkDir, "*", "recipe.json"))
 	sort.Strings(entries)
+	wantScene := r.Recipe.FindScene(sceneID)
 	for i := len(entries) - 1; i >= 0; i-- {
 		dir := filepath.Dir(entries[i])
 		if dir == current {
 			continue
 		}
 		rec, err := recipe.LoadJSON(entries[i])
-		if err != nil || rec.StoryboardHash != r.Recipe.StoryboardHash {
+		if err != nil {
+			continue
+		}
+		matches := rec.StoryboardHash == r.Recipe.StoryboardHash
+		if !matches && wantScene != nil && wantScene.SceneHash != "" {
+			if otherSc := rec.FindScene(sceneID); otherSc != nil && otherSc.SceneHash == wantScene.SceneHash {
+				matches = true
+			}
+		}
+		if !matches {
 			continue
 		}
 		for _, ext := range []string{".webm", ".mp4"} {

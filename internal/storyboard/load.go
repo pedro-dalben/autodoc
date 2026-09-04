@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -103,6 +104,42 @@ func targetKey(t *Target) string {
 		return ""
 	}
 	return fmt.Sprintf("ref=%s,test=%s,id=%s,role=%s,name=%s,label=%s,text=%s,css=%s", t.Ref, t.TestID, t.ID, t.Role, t.Name, t.Label, t.Text, t.CSS)
+}
+
+// SceneHash computes a deterministic content-addressable hash of a single scene:
+// its ID, URL, targets, beats, actions, speech, waits, and holds. If a different
+// scene in the storyboard changes, this scene's hash remains unchanged, enabling
+// granular rebuild and safe video reuse across retakes.
+func (sc *Scene) SceneHash() string {
+	h := sha256.New()
+	fmt.Fprintf(h, "scene:%s|%s|%t|%s|%s|", sc.ID, sc.URL, sc.Screenshot, sc.Camera, sc.Attention)
+	var targetNames []string
+	for k := range sc.Targets {
+		targetNames = append(targetNames, k)
+	}
+	sort.Strings(targetNames)
+	for _, k := range targetNames {
+		t := sc.Targets[k]
+		fmt.Fprintf(h, "target:%s=%s|", k, targetKey(&t))
+	}
+	for _, b := range sc.Beats {
+		fmt.Fprintf(h, "beat:%s|", b.ID)
+		for _, ev := range b.Sequence {
+			switch {
+			case ev.Speech != nil:
+				fmt.Fprintf(h, "speech:%s|%s|%d|%d|%s|", ev.Speech.Text, ev.Speech.Voice, ev.Speech.PauseBeforeMs, ev.Speech.PauseAfterMs, ev.Speech.Anchor)
+			case ev.Action != nil:
+				a := ev.Action
+				fmt.Fprintf(h, "action:%s|%s|%s|%s|%s|%s|secret:%t|instant:%s|zoom:%s|camera:%s|att:%s|result:%s|hold:%s|call:%s|anticipation:%s|", a.Type, targetKey(a.Target), a.URL, a.Text, a.Value, a.Key, a.SecretRef != "", boolKey(a.Instant), boolKey(a.NoZoom), a.Camera, a.Attention, targetKey(a.ResultTarget), intKey(a.ResultHoldMs), a.Callout, boolKey(a.NoAnticipation))
+			case ev.Wait != nil:
+				fmt.Fprintf(h, "wait:%s|%s|%s|%s|%d|%d|%t|", ev.Wait.State, targetKey(ev.Wait.Target), ev.Wait.URL, ev.Wait.Value, ev.Wait.TimeoutMs, ev.Wait.SettleMs, ev.Wait.IsCompressible())
+			case ev.Hold != nil:
+				fmt.Fprintf(h, "hold:%d|", ev.Hold.DurationMs)
+			}
+		}
+	}
+	sum := h.Sum(nil)
+	return hex.EncodeToString(sum)[:16]
 }
 
 func boolKey(v *bool) string {

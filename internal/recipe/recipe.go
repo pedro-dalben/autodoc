@@ -27,6 +27,7 @@ type ScenePlan struct {
 	Title       string              `json:"title"`
 	URL         string              `json:"url"`
 	Screenshot  bool                `json:"screenshot"`
+	SceneHash   string              `json:"scene_hash,omitempty"`
 	Beats       []BeatPlan          `json:"beats"`
 	SetupPrefix []storyboard.Action `json:"setup_prefix,omitempty"`
 }
@@ -81,7 +82,7 @@ func Compile(sb *storyboard.Storyboard, ttsModel, ttsVoice, ttsLang string, ttsS
 	}
 	globalIdx := 0
 	for _, sc := range sb.Scenes {
-		sp := ScenePlan{ID: sc.ID, Title: sc.Title, URL: sc.URL, Screenshot: sc.Screenshot}
+		sp := ScenePlan{ID: sc.ID, Title: sc.Title, URL: sc.URL, Screenshot: sc.Screenshot, SceneHash: sc.SceneHash()}
 		if sc.URL != "" && len(sp.SetupPrefix) == 0 {
 			_ = globalIdx
 		}

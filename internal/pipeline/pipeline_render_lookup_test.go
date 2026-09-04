@@ -136,3 +136,49 @@ func TestLatestRunDirSkipsCurrentAndRawless(t *testing.T) {
 		t.Fatalf("LatestRunDirWithHash = %q, want 20200101-000002", got)
 	}
 }
+
+// Granular rebuild / content-addressable reuse: when scene-002 changes
+// (changing the global StoryboardHash), scene-001's video from run A must
+// still be reused because its SceneHash is identical.
+func TestFindSceneVideoReusesUnaffectedSceneOnDifferentStoryboardHash(t *testing.T) {
+	root := t.TempDir()
+	sbPathA := writeLookupSB(t, root)
+
+	runA := compileRunWithID(t, root, sbPathA, "20200101-000001")
+	rawA := putRaw(t, runA, "scene-001")
+
+	// Storyboard B: scene-002 narration changed, but scene-001 is untouched.
+	sbB := `version: 1
+meta:
+  title: "T"
+  language: "pt-BR"
+config:
+  base_url: "http://localhost:8099"
+setup:
+  start_url: "/"
+scenes:
+  - id: scene-001
+    title: S1
+    beats: [{id: b1, sequence: [{speech: {text: "Oi"}}]}]
+  - id: scene-002
+    title: S2
+    beats: [{id: b1, sequence: [{speech: {text: "Texto alterado na cena 2!"}}]}]
+`
+	if err := os.WriteFile(sbPathA, []byte(sbB), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	renderRunB := compileRunWithID(t, root, sbPathA, "20200101-000002")
+	if renderRunB.Recipe.StoryboardHash == runA.Recipe.StoryboardHash {
+		t.Fatal("expected different StoryboardHash after editing scene-002")
+	}
+
+	// Must reuse scene-001 video despite different StoryboardHash!
+	gotRaw, srcDir := renderRunB.FindSceneVideo("scene-001")
+	if gotRaw != rawA {
+		t.Fatalf("FindSceneVideo(scene-001) = %q, want %q", gotRaw, rawA)
+	}
+	if srcDir != filepath.Join(renderRunB.WorkDir, "20200101-000001") {
+		t.Fatalf("FindSceneVideo srcDir = %q", srcDir)
+	}
+}
