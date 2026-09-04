@@ -390,7 +390,62 @@ func newAgentCmd() *cobra.Command {
 		fmt.Fprint(cmd.OutOrStdout(), text)
 		return nil
 	}}
-	c.AddCommand(boot, create, status, guide)
+	var stateJSON bool
+	var stateSb string
+	stateCmd := &cobra.Command{
+		Use:   "state",
+		Short: "Report current tutorial lifecycle state and next recommended commands",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, _ := os.Getwd()
+			root := cwd
+			sbPath := stateSb
+			if sbPath != "" {
+				var err error
+				root, _, sbPath, err = resolveFromCwd(sbPath)
+				if err != nil {
+					return err
+				}
+				if rel, err := filepath.Rel(root, sbPath); err == nil {
+					sbPath = rel
+				}
+			}
+			st := agent.DetectState(root, sbPath)
+			if stateJSON {
+				b, err := json.MarshalIndent(st, "", "  ")
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "state: %s\n", st.State)
+			if st.StoryboardPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "storyboard: %s\n", st.StoryboardPath)
+			}
+			if st.LatestRunDir != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "latest_run: %s\n", st.LatestRunDir)
+			}
+			if st.VideoPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "video: %s\n", st.VideoPath)
+			}
+			if st.QAPath != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "qa_report: %s\n", st.QAPath)
+			}
+			if st.EvidenceCount > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "evidence: %d items\n", st.EvidenceCount)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "next_action: %s\n", st.NextAction)
+			fmt.Fprintln(cmd.OutOrStdout(), "next_commands:")
+			for _, c := range st.NextCommands {
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", c)
+			}
+			return nil
+		},
+	}
+	stateCmd.Flags().BoolVar(&stateJSON, "json", false, "output JSON format")
+	stateCmd.Flags().StringVar(&stateSb, "storyboard", "", "storyboard path")
+
+	c.AddCommand(boot, stateCmd, create, status, guide)
 	return c
 }
 

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/pedro-dalben/autodoc/internal/agent"
 	"github.com/pedro-dalben/autodoc/internal/cinematic"
 	"github.com/pedro-dalben/autodoc/internal/config"
 	"github.com/pedro-dalben/autodoc/internal/doctor"
@@ -17,7 +19,6 @@ import (
 	"github.com/pedro-dalben/autodoc/internal/mcp"
 	"github.com/pedro-dalben/autodoc/internal/media"
 	"github.com/pedro-dalben/autodoc/internal/pipeline"
-	"github.com/pedro-dalben/autodoc/internal/recipe"
 	"github.com/pedro-dalben/autodoc/internal/storyboard"
 	"github.com/pedro-dalben/autodoc/internal/timeline"
 	"github.com/pedro-dalben/autodoc/internal/tts"
@@ -47,6 +48,8 @@ func NewRoot() *cobra.Command {
 		newEvidenceCmd(),
 		newContextCmd(),
 		newAgentCmd(),
+		newExplainCmd(),
+		newDiagnoseCmd(),
 		newMCPCmd(),
 		newUninstallCmd(),
 		newVersionCmd(),
@@ -943,24 +946,53 @@ func registerMCPTools(s *mcp.Server) {
 			}
 			return map[string]any{"segments": rep.Segments, "hits": rep.Hits, "misses": rep.Misses}, nil
 		})
-	s.Register("timeline_build", "Build planned timeline from compiled recipe", map[string]any{"type": "object", "properties": sbProp, "required": []string{"storyboard"}},
+	s.Register("agent_state", "Detect current tutorial lifecycle state and next recommended commands",
+		map[string]any{"type": "object", "properties": sbProp},
 		func(args map[string]any) (any, error) {
-			r, err := recipe.LoadJSON(mcp.StrArg(args, "storyboard", ""))
-			_ = r
-			_ = err
-			return map[string]any{"note": "use tts_synthesize to build timeline deterministically"}, nil
+			cwd, _ := os.Getwd()
+			sbPath := mcp.StrArg(args, "storyboard", "")
+			root := cwd
+			if sbPath != "" {
+				if !filepath.IsAbs(sbPath) {
+					sbPath = filepath.Join(cwd, sbPath)
+				}
+				root = filepath.Dir(sbPath)
+			}
+			st := agent.DetectState(root, sbPath)
+			return st, nil
 		})
-	s.Register("record", "Deterministic scene record (optional scene_id retake)", map[string]any{"type": "object", "properties": map[string]any{"storyboard": map[string]any{"type": "string"}, "scene_id": map[string]any{"type": "string"}}},
+	s.Register("explain", "Explain cinematic director decisions (camera, attention, pacing, holds) for scenes",
+		map[string]any{"type": "object", "properties": map[string]any{
+			"scene_id": map[string]any{"type": "string", "description": "optional scene id filter"},
+			"run_dir":  map[string]any{"type": "string", "description": "optional run dir"},
+		}},
 		func(args map[string]any) (any, error) {
-			return map[string]any{"note": "run `autodoc record --storyboard <sb> [--retake <scene>]` in a terminal for full capture logs"}, nil
-		})
-	s.Register("render", "Render final MP4 from timeline", map[string]any{"type": "object", "properties": sbProp},
-		func(args map[string]any) (any, error) {
-			return map[string]any{"note": "run `autodoc render --storyboard <sb>` in a terminal"}, nil
-		})
-	s.Register("artifact_export", "Export publishable bundle", map[string]any{"type": "object", "properties": sbProp},
-		func(args map[string]any) (any, error) {
-			return map[string]any{"note": "run `autodoc export --storyboard <sb>` in a terminal"}, nil
+			cwd, _ := os.Getwd()
+			rDir := mcp.StrArg(args, "run_dir", "")
+			sceneID := mcp.StrArg(args, "scene_id", "")
+			if rDir == "" {
+				workDir := filepath.Join(cwd, ".autodoc", "_work")
+				entries, err := os.ReadDir(workDir)
+				if err != nil || len(entries) == 0 {
+					return nil, fmt.Errorf("no runs found in %s", workDir)
+				}
+				var runs []string
+				for _, e := range entries {
+					if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+						runs = append(runs, e.Name())
+					}
+				}
+				sort.Strings(runs)
+				if len(runs) == 0 {
+					return nil, fmt.Errorf("no run directories found in %s", workDir)
+				}
+				rDir = filepath.Join(workDir, runs[len(runs)-1])
+			}
+			exps, _, err := cinematic.ExplainRun(rDir, sceneID)
+			if err != nil {
+				return nil, err
+			}
+			return exps, nil
 		})
 	s.Register("doctor", "Run diagnostics (media/browser/tts/harness/skill)", map[string]any{"type": "object", "properties": map[string]any{}},
 		func(args map[string]any) (any, error) {
@@ -1213,4 +1245,82 @@ func checkBrowser(out interface{ Write([]byte) (int, error) }) {
 	for _, line := range strings.Split(strings.TrimSpace(sb.String()), "\n") {
 		fmt.Fprintln(out, line)
 	}
+}
+
+func newExplainCmd() *cobra.Command {
+	var runDir, sbPath string
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "explain [scene_id]",
+		Short: "Explain cinematic director decisions (camera, waits, result holds, attention)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sceneFilter := ""
+			if len(args) > 0 {
+				sceneFilter = args[0]
+			}
+			rDir := runDir
+			if rDir == "" {
+				root, _, _, err := loadProject(cmd, sbPath)
+				if err != nil {
+					root, _ = os.Getwd()
+				}
+				workDir := filepath.Join(root, ".autodoc", "_work")
+				entries, err := os.ReadDir(workDir)
+				if err != nil || len(entries) == 0 {
+					return fmt.Errorf("no runs found in %s; render with --cinematic first", workDir)
+				}
+				var runs []string
+				for _, e := range entries {
+					if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+						runs = append(runs, e.Name())
+					}
+				}
+				sort.Strings(runs)
+				if len(runs) == 0 {
+					return fmt.Errorf("no run directories found in %s", workDir)
+				}
+				rDir = filepath.Join(workDir, runs[len(runs)-1])
+			}
+			exps, text, err := cinematic.ExplainRun(rDir, sceneFilter)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				b, _ := json.MarshalIndent(exps, "", "  ")
+				fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return nil
+			}
+			fmt.Fprint(cmd.OutOrStdout(), text)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&runDir, "run-dir", "", "path to specific run directory in .autodoc/_work/")
+	cmd.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "output JSON format")
+	return cmd
+}
+
+func newDiagnoseCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "diagnose",
+		Short: "Run self-diagnosis on system environment and latest project run",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, _ := os.Getwd()
+			root := cwd
+			if lc, err := config.FindConfig(cwd); err == nil && lc.Source != "default" {
+				root = lc.Root
+			}
+			diag := doctor.Diagnose(root)
+			if asJSON {
+				b, _ := json.MarshalIndent(diag, "", "  ")
+				fmt.Fprintln(cmd.OutOrStdout(), string(b))
+				return nil
+			}
+			diag.Print(cmd.OutOrStdout())
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "output JSON format")
+	return cmd
 }

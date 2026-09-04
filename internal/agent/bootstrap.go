@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -107,3 +108,147 @@ func Bootstrap(root, goal, storyboard string) string {
 }
 
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }
+
+// State represents the explicit lifecycle state of the tutorial artifact.
+type State string
+
+const (
+	StateUnknown    State = "UNKNOWN"
+	StateDiscovered State = "DISCOVERED"
+	StatePlanned    State = "PLANNED"
+	StateValidated  State = "VALIDATED"
+	StateRecorded   State = "RECORDED"
+	StateRendered   State = "RENDERED"
+	StateVerified   State = "VERIFIED"
+)
+
+// StateSummary is the machine-readable session resume status.
+type StateSummary struct {
+	State          State    `json:"state"`
+	StoryboardPath string   `json:"storyboard_path,omitempty"`
+	LatestRunDir   string   `json:"latest_run_dir,omitempty"`
+	VideoPath      string   `json:"video_path,omitempty"`
+	QAPath         string   `json:"qa_path,omitempty"`
+	EvidenceCount  int      `json:"evidence_count"`
+	ScenesCount    int      `json:"scenes_count,omitempty"`
+	NextAction     string   `json:"next_action"`
+	NextCommands   []string `json:"next_commands"`
+}
+
+// DetectState evaluates the workspace to determine the current lifecycle state
+// and the next deterministic actions.
+func DetectState(root, sbPath string) StateSummary {
+	sum := StateSummary{
+		State: StateUnknown,
+	}
+	if sbPath == "" {
+		for _, cand := range []string{"storyboard.yml", "storyboard.yaml"} {
+			if exists(filepath.Join(root, cand)) {
+				sbPath = cand
+				break
+			}
+		}
+	}
+	if sbPath != "" && exists(filepath.Join(root, sbPath)) {
+		sum.StoryboardPath = sbPath
+	}
+
+	// Check evidence
+	evIndexPath := filepath.Join(root, ".autodoc", "cache", "evidence", "index.jsonl")
+	if b, err := os.ReadFile(evIndexPath); err == nil {
+		lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+		count := 0
+		for _, l := range lines {
+			if strings.TrimSpace(l) != "" {
+				count++
+			}
+		}
+		sum.EvidenceCount = count
+	}
+
+	// Check latest run in .autodoc/_work/
+	workDir := filepath.Join(root, ".autodoc", "_work")
+	var latestRun string
+	if entries, err := os.ReadDir(workDir); err == nil {
+		var runs []string
+		for _, e := range entries {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				runs = append(runs, e.Name())
+			}
+		}
+		sort.Strings(runs)
+		if len(runs) > 0 {
+			latestRun = filepath.Join(workDir, runs[len(runs)-1])
+			sum.LatestRunDir = latestRun
+		}
+	}
+
+	hasVideo := false
+	hasQA := false
+	hasCaptures := false
+	if latestRun != "" {
+		mp4Path := filepath.Join(latestRun, "tutorial.mp4")
+		if exists(mp4Path) {
+			hasVideo = true
+			sum.VideoPath = mp4Path
+		}
+		qaReportPath := filepath.Join(latestRun, "qa_report.json")
+		if exists(qaReportPath) {
+			hasQA = true
+			sum.QAPath = qaReportPath
+		}
+		videoDir := filepath.Join(latestRun, "video")
+		if ves, err := os.ReadDir(videoDir); err == nil {
+			for _, ve := range ves {
+				if strings.HasSuffix(ve.Name(), ".webm") {
+					hasCaptures = true
+					break
+				}
+			}
+		}
+	}
+
+	sbTarget := sum.StoryboardPath
+	if sbTarget == "" {
+		sbTarget = "storyboard.yml"
+	}
+
+	switch {
+	case hasVideo && hasQA:
+		sum.State = StateVerified
+		sum.NextAction = "Tutorial rendered and verified. Ready for publishing."
+		sum.NextCommands = []string{"autodoc export --storyboard " + sbTarget}
+	case hasVideo:
+		sum.State = StateRendered
+		sum.NextAction = "Tutorial rendered. Run cinematic QA validation."
+		sum.NextCommands = []string{"autodoc validate --storyboard " + sbTarget + " --cinematic", "autodoc export --storyboard " + sbTarget}
+	case hasCaptures:
+		sum.State = StateRecorded
+		sum.NextAction = "Scenes captured. Reconcile and render cinematic tutorial."
+		sum.NextCommands = []string{"autodoc render --storyboard " + sbTarget + " --cinematic"}
+	case sum.StoryboardPath != "":
+		recipePath := ""
+		if latestRun != "" && exists(filepath.Join(latestRun, "recipe.json")) {
+			recipePath = filepath.Join(latestRun, "recipe.json")
+		}
+		if recipePath != "" {
+			sum.State = StateValidated
+			sum.NextAction = "Storyboard validated. Synthesize TTS and record browser scenes."
+			sum.NextCommands = []string{"autodoc tts --storyboard " + sbTarget, "autodoc record --storyboard " + sbTarget}
+		} else {
+			sum.State = StatePlanned
+			sum.NextAction = "Storyboard authoring detected. Validate storyboard."
+			sum.NextCommands = []string{"autodoc validate --storyboard " + sbTarget}
+		}
+	case sum.EvidenceCount > 0:
+		sum.State = StateDiscovered
+		sum.NextAction = "UI evidence collected. Author storyboard with discovered locators."
+		sum.NextCommands = []string{"autodoc validate --storyboard " + sbTarget}
+	default:
+		sum.State = StateUnknown
+		sum.NextAction = "No storyboard or evidence found. Query UI for intent controls."
+		sum.NextCommands = []string{"autodoc ui query --url / --intent \"tutorial goal\""}
+	}
+
+	return sum
+}

@@ -72,7 +72,7 @@ func TestMCPInitializeAndToolsList(t *testing.T) {
 			names[m["name"].(string)] = true
 		}
 	}
-	for _, want := range []string{"project_info", "storyboard_validate", "tts_synthesize", "record", "render", "doctor"} {
+	for _, want := range []string{"project_info", "storyboard_validate", "tts_synthesize", "agent_state", "explain", "doctor"} {
 		if !names[want] {
 			t.Fatalf("missing tool %s in %v", want, names)
 		}
