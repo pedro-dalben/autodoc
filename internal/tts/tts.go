@@ -47,6 +47,17 @@ func SegmentHash(text, voice, model, language string, speed float64) string {
 	return recipe.SpeechHash(text, voice, model, language, speed)
 }
 
+// CacheKey scopes a speech content hash to the synthesis backend that
+// produced it. Different providers (or response formats) render different
+// bytes and durations for identical text+voice, so sharing one cache entry
+// across them would desync the timeline. Provider switches miss once and
+// repopulate; they never collide.
+func CacheKey(speechHash, provider, format string) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "tts-cache-v1|%s|%s|%s", speechHash, provider, format)
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
 type Cache struct {
 	Dir string
 }

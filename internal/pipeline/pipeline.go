@@ -164,8 +164,15 @@ func (r *Run) SynthesizeTTS(ctx context.Context, provider tts.Provider, cache *t
 	rep := &TTSReport{}
 	durations := map[string]float64{}
 	for _, seg := range r.Recipe.SpeechSegments {
-		voice := cfg.TTS.Voice
-		hash := recipe.SpeechHash(seg.Text, voice, cfg.TTS.Model, cfg.TTS.Language, cfg.TTS.Speed)
+		voice := seg.Voice
+		if voice == "" {
+			voice = cfg.TTS.Voice
+		}
+		format := cfg.TTS.ResponseFormat
+		if format == "" {
+			format = "wav"
+		}
+		hash := tts.CacheKey(seg.Hash, provider.Name(), format)
 		rep.Segments++
 		var wav []byte
 		var wavPath string
@@ -175,10 +182,7 @@ func (r *Run) SynthesizeTTS(ctx context.Context, provider tts.Provider, cache *t
 			cached = true
 			rep.Hits++
 		} else {
-			req := tts.Request{Text: seg.Text, Voice: voice, Model: cfg.TTS.Model, Language: cfg.TTS.Language, Speed: cfg.TTS.Speed, Format: cfg.TTS.ResponseFormat}
-			if req.Format == "" {
-				req.Format = "wav"
-			}
+			req := tts.Request{Text: seg.Text, Voice: voice, Model: cfg.TTS.Model, Language: cfg.TTS.Language, Speed: cfg.TTS.Speed, Format: format}
 			var err error
 			wav, err = provider.Synthesize(ctx, req)
 			if err != nil {
@@ -234,7 +238,7 @@ func (r *Run) SynthesizeTTS(ctx context.Context, provider tts.Provider, cache *t
 func (r *Run) LoadTimeline() error {
 	for _, p := range []string{filepath.Join(r.WorkDir, r.RunID, "timeline.json"), filepath.Join(r.WorkDir, "timeline.json")} {
 		if tl, err := timeline.LoadJSON(p); err == nil {
-			if tl.StoryboardHash == r.Recipe.StoryboardHash || r.Recipe.StoryboardHash == "" {
+			if tl.StoryboardHash == r.Recipe.StoryboardHash {
 				r.Timeline = tl
 				return nil
 			}
@@ -242,10 +246,12 @@ func (r *Run) LoadTimeline() error {
 	}
 	entries, _ := filepath.Glob(filepath.Join(r.WorkDir, "*", "timeline.json"))
 	var best *timeline.Timeline
+	var bestPath string
 	for _, p := range entries {
 		if tl, err := timeline.LoadJSON(p); err == nil && tl.StoryboardHash == r.Recipe.StoryboardHash {
-			if best == nil || tl.TotalS > best.TotalS {
+			if best == nil || p > bestPath {
 				best = tl
+				bestPath = p
 			}
 		}
 	}
