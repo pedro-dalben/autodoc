@@ -357,6 +357,8 @@ type Inventory struct {
 	Controls    []Element `json:"controls"`
 	Recommended string    `json:"recommended,omitempty"`
 	Intent      string    `json:"intent,omitempty"`
+	Confidence  string    `json:"confidence,omitempty"`
+	Diagnostic  string    `json:"diagnostic,omitempty"`
 }
 
 // RegionSummary returns "region(count)" strings sorted by region name.
@@ -381,6 +383,12 @@ func (inv Inventory) RegionSummary() string {
 func CompactInventory(inv Inventory) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "url: %s  title: %s\n", inv.URL, inv.Title)
+	if inv.Confidence != "" {
+		fmt.Fprintf(&b, "confidence: %s\n", inv.Confidence)
+	}
+	if inv.Diagnostic != "" {
+		fmt.Fprintf(&b, "diagnostic: %s\n", inv.Diagnostic)
+	}
 	fmt.Fprintf(&b, "regions: %s\n", inv.RegionSummary())
 	b.WriteString("controls:\n")
 	for _, c := range inv.Controls {

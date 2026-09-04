@@ -11,6 +11,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -138,7 +139,7 @@ func Inspect(opts InspectOptions) (evidence.Inventory, string, error) {
 	}
 	inv.URL = resolveURL(opts)
 	inv.Intent = opts.Intent
-	inv.Controls = filterControls(inv.Controls, opts.Intent, opts.Limit)
+	inv.Controls, inv.Confidence, inv.Diagnostic = FilterControlsWithConfidence(inv.Controls, opts.Intent, opts.Limit)
 	inv.Recommended = recommend(inv.Controls)
 	return inv, rawJSON, nil
 }
@@ -159,6 +160,7 @@ type DiffResult struct {
 	Changed   []string                    `json:"changed,omitempty"`
 	Changes   []evidence.MeaningfulChange `json:"changes,omitempty"`
 	Dialog    string                      `json:"dialog,omitempty"` // opened | closed
+	Alert     string                      `json:"alert,omitempty"`  // toast, alert, or validation error
 	Region    string                      `json:"region,omitempty"` // dominant region of the change
 	BeforeRef string                      `json:"before_ref,omitempty"`
 	AfterRef  string                      `json:"after_ref,omitempty"`
@@ -175,6 +177,9 @@ func (d DiffResult) Compact() string {
 	if d.Dialog != "" {
 		fmt.Fprintf(&b, "dialog: %s\n", d.Dialog)
 	}
+	if d.Alert != "" {
+		fmt.Fprintf(&b, "alert: %s\n", d.Alert)
+	}
 	for _, a := range d.Added {
 		fmt.Fprintf(&b, "+ %s\n", a)
 	}
@@ -184,7 +189,7 @@ func (d DiffResult) Compact() string {
 	for _, c := range d.Changed {
 		fmt.Fprintf(&b, "~ %s\n", c)
 	}
-	if len(d.Added)+len(d.Removed)+len(d.Changed) == 0 && d.Dialog == "" {
+	if len(d.Added)+len(d.Removed)+len(d.Changed) == 0 && d.Dialog == "" && d.Alert == "" {
 		b.WriteString("no meaningful change detected\n")
 	}
 	if d.Region != "" {
@@ -370,9 +375,9 @@ func intentTokens(intent string) []string {
 	return toks
 }
 
-// filterControls narrows the inventory by intent (when given) and caps the
-// number of controls actually sent to the agent.
-func filterControls(controls []evidence.Element, intent string, limit int) []evidence.Element {
+// FilterControlsWithConfidence narrows the inventory by intent and returns the controls,
+// confidence level, and an optional diagnostic hint.
+func FilterControlsWithConfidence(controls []evidence.Element, intent string, limit int) ([]evidence.Element, string, string) {
 	if limit <= 0 {
 		limit = 12
 	}
@@ -382,6 +387,7 @@ func filterControls(controls []evidence.Element, intent string, limit int) []evi
 		score int
 	}
 	var scoredAll []scored
+	maxScore := 0
 	for _, el := range controls {
 		s := 0
 		if len(toks) > 0 {
@@ -398,12 +404,12 @@ func filterControls(controls []evidence.Element, intent string, limit int) []evi
 			// verbs used in tutorials map to interaction kinds
 			for _, t := range toks {
 				switch {
-				case strings.Contains("enviar send submit salvar save", t) && role == "button":
+				case strings.Contains("enviar send submit salvar save criar cadastrar", t) && role == "button":
 					s += 2
-				case strings.Contains("escrever digitar type escreve mensagem message coment", t) &&
+				case strings.Contains("escrever digitar type escreve mensagem message coment nome input", t) &&
 					(role == "textbox" || el.Tag == "textarea"):
 					s += 2
-				case strings.Contains("abrir open entrar acessar conversa chat", t) && role == "link":
+				case strings.Contains("abrir open entrar acessar conversa chat ir navegar", t) && role == "link":
 					s += 1
 				}
 			}
@@ -413,9 +419,12 @@ func filterControls(controls []evidence.Element, intent string, limit int) []evi
 				s = 1
 			}
 		}
+		if s > maxScore {
+			maxScore = s
+		}
 		scoredAll = append(scoredAll, scored{el, s})
 	}
-	if len(toks) > 0 {
+	if len(toks) > 0 && maxScore > 0 {
 		// neighborhood: keep zero-score elements adjacent (same row) to hits
 		kept := make([]scored, 0, len(scoredAll))
 		for _, sc := range scoredAll {
@@ -444,14 +453,42 @@ func filterControls(controls []evidence.Element, intent string, limit int) []evi
 		}
 		return scoredAll[i].el.BBox.Y < scoredAll[j].el.BBox.Y
 	})
-	out := make([]evidence.Element, 0, limit)
+
+	confidence := "broad"
+	diagnostic := ""
+	effectiveLimit := limit
+	if len(toks) > 0 {
+		if maxScore >= 5 {
+			confidence = "high (focused)"
+			if limit > 5 {
+				effectiveLimit = 5
+			}
+		} else if maxScore >= 3 {
+			confidence = "medium"
+			if limit > 8 {
+				effectiveLimit = 8
+			}
+		} else {
+			confidence = "low (uncertain)"
+			diagnostic = "intent tokens had low semantic overlap with page controls; returning broader elements"
+		}
+	}
+
+	out := make([]evidence.Element, 0, effectiveLimit)
 	for _, sc := range scoredAll {
-		if len(out) >= limit {
+		if len(out) >= effectiveLimit {
 			break
 		}
 		out = append(out, sc.el)
 	}
-	return out
+	return out, confidence, diagnostic
+}
+
+// filterControls narrows the inventory by intent (when given) and caps the
+// number of controls actually sent to the agent.
+func filterControls(controls []evidence.Element, intent string, limit int) []evidence.Element {
+	res, _, _ := FilterControlsWithConfidence(controls, intent, limit)
+	return res
 }
 
 // recommend proposes the canonical pair for message-style flows.
@@ -472,11 +509,36 @@ func recommend(controls []evidence.Element) string {
 	return ""
 }
 
+var (
+	clockTimeRegex = regexp.MustCompile(`(?i)^(\d{1,2}:\d{2}(:\d{2})?(\s*(am|pm))?|\d+[\s\w]+(ago|atrás)|agora|just now|há\s+\d+.*)$`)
+	spinnerRegex   = regexp.MustCompile(`(?i)(spinner|loading|skeleton|carregando|aguarde)`)
+)
+
+func isPureTimeDiff(prevText, curText string) bool {
+	p := strings.TrimSpace(prevText)
+	c := strings.TrimSpace(curText)
+	if p == c {
+		return false
+	}
+	return clockTimeRegex.MatchString(p) && clockTimeRegex.MatchString(c)
+}
+
+func isTransientNoise(el evidence.Element) bool {
+	text := el.Name + " " + el.Text + " " + el.TestID
+	if el.Role == "progressbar" || spinnerRegex.MatchString(text) {
+		return true
+	}
+	return false
+}
+
 // semanticDiff compares two inventories by stable keys.
 func semanticDiff(before, after evidence.Inventory) DiffResult {
 	key := func(el evidence.Element) string {
 		if el.TestID != "" {
 			return "tid:" + el.TestID
+		}
+		if el.ID != "" {
+			return "id:" + el.ID
 		}
 		return "el:" + el.Tag + "|" + el.Role + "|" + el.Name
 	}
@@ -493,12 +555,28 @@ func semanticDiff(before, after evidence.Inventory) DiffResult {
 	for k, el := range afterMap {
 		prev, ok := beforeMap[k]
 		if !ok {
+			text := strings.ToLower(el.Role + " " + el.TestID + " " + el.Name + " " + el.Text)
+			if el.Role == "alert" || el.Role == "status" || strings.Contains(text, "toast") || strings.Contains(text, "alert") || strings.Contains(text, "error") || strings.Contains(text, "erro") {
+				msg := el.Name
+				if msg == "" {
+					msg = el.Text
+				}
+				if msg != "" && res.Alert == "" {
+					res.Alert = msg
+				}
+			}
+			if isTransientNoise(el) && len(afterMap) > 1 {
+				continue
+			}
 			res.Added = append(res.Added, el.CompactLine())
 			res.Changes = append(res.Changes, evidence.MeaningfulChange{Type: "content_added", Region: el.Region, Description: el.CompactLine(), BBox: el.BBox})
 			regionCount[el.Region]++
 			continue
 		}
 		if prev.Text != el.Text || prev.Name != el.Name || prev.Enabled != el.Enabled {
+			if prev.Enabled == el.Enabled && prev.Name == el.Name && isPureTimeDiff(prev.Text, el.Text) {
+				continue
+			}
 			res.Changed = append(res.Changed, el.CompactLine())
 			res.Changes = append(res.Changes, evidence.MeaningfulChange{Type: "state_changed", Region: el.Region, Description: el.CompactLine(), BBox: el.BBox})
 			regionCount[el.Region]++
@@ -506,6 +584,9 @@ func semanticDiff(before, after evidence.Inventory) DiffResult {
 	}
 	for k, el := range beforeMap {
 		if _, ok := afterMap[k]; !ok {
+			if isTransientNoise(el) {
+				continue
+			}
 			res.Removed = append(res.Removed, el.CompactLine())
 			res.Changes = append(res.Changes, evidence.MeaningfulChange{Type: "content_removed", Region: el.Region, Description: el.CompactLine(), BBox: el.BBox})
 			regionCount[el.Region]++
