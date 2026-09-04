@@ -351,6 +351,10 @@ func (b *PlaywrightBackend) resolveValue(a storyboard.Action) (string, bool, err
 
 func (b *PlaywrightBackend) cueFocus(sel string, loc playwright.Locator, act *storyboard.Action) (visual.BBox, visual.Point, bool) {
 	b.ensureOverlay()
+	// Capture geometry only after Playwright has made the target visible. A
+	// click itself also scrolls, but doing it afterwards records an off-screen
+	// bbox and makes the director/QA reason about a frame the viewer never saw.
+	_ = loc.ScrollIntoViewIfNeeded()
 	bb, ok := b.bboxOf(sel)
 	if !ok {
 		return visual.BBox{}, visual.Point{}, false
