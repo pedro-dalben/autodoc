@@ -158,6 +158,11 @@ func segmentVideoChain(sg timeline.AVSegment, rawDur float64, w, h int, zoomOK b
 	return b.String()
 }
 
+// ZoomChain returns the FFmpeg video filter chain for zooming into a segment.
+func ZoomChain(sg timeline.AVSegment, w, h int) string {
+	return zoomChain(sg, w, h)
+}
+
 func zoomChain(sg timeline.AVSegment, w, h int) string {
 	D := sg.DurS
 	if D <= 0.15 {
@@ -169,8 +174,24 @@ func zoomChain(sg timeline.AVSegment, w, h int) string {
 	}
 	cx := sg.NormBBox.X*float64(w) + sg.NormBBox.Width*float64(w)/2
 	cy := sg.NormBBox.Y*float64(h) + sg.NormBBox.Height*float64(h)/2
-	z := fmt.Sprintf("(1+(%.4f-1)*if(lt(t,%.3f),pow(t/%.3f\\,2)*(3-2*t/%.3f)\\,if(gt(t\\,%.3f)\\,pow((%.3f-t)/%.3f\\,2)*(3-2*(%.3f-t)/%.3f)\\,1)))",
-		sg.Zoom, T, T, T, D-T, D, T, D, T)
+
+	var z string
+	switch sg.CameraTransition {
+	case "zoom_stay":
+		z = fmt.Sprintf("%.4f", sg.Zoom)
+	case "zoom_in":
+		z = fmt.Sprintf("(1+(%.4f-1)*if(lt(t,%.3f),pow(t/%.3f\\,2)*(3-2*t/%.3f)\\,1))",
+			sg.Zoom, T, T, T)
+	case "zoom_out":
+		z = fmt.Sprintf("(1+(%.4f-1)*if(gt(t\\,%.3f)\\,pow((%.3f-t)/%.3f\\,2)*(3-2*(%.3f-t)/%.3f)\\,1))",
+			sg.Zoom, D-T, D, T, D, T)
+	case "zoom_isolated", "":
+		fallthrough
+	default:
+		z = fmt.Sprintf("(1+(%.4f-1)*if(lt(t,%.3f),pow(t/%.3f\\,2)*(3-2*t/%.3f)\\,if(gt(t\\,%.3f)\\,pow((%.3f-t)/%.3f\\,2)*(3-2*(%.3f-t)/%.3f)\\,1)))",
+			sg.Zoom, T, T, T, D-T, D, T, D, T)
+	}
+
 	cw := fmt.Sprintf("iw/%s", z)
 	ch := fmt.Sprintf("ih/%s", z)
 	x := fmt.Sprintf("max(0\\,min(iw-(%s)\\,%.1f-(%s)/2))", cw, cx, cw)

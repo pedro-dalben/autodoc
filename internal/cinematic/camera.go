@@ -22,15 +22,16 @@ const (
 
 // CameraDecision pairs a segment with its directed move + zoom.
 type CameraDecision struct {
-	SegmentIdx int        `json:"segment_idx"`
-	SceneID    string     `json:"scene_id"`
-	Kind       string     `json:"kind"`
-	Label      string     `json:"label"`
-	Move       CameraMove `json:"move"`
-	Zoom       float64    `json:"zoom"`
-	Reason     string     `json:"reason"`
-	Reversal   bool       `json:"reversal,omitempty"`
-	Suppressed bool       `json:"suppressed,omitempty"`
+	SegmentIdx int          `json:"segment_idx"`
+	SceneID    string       `json:"scene_id"`
+	Kind       string       `json:"kind"`
+	Label      string       `json:"label"`
+	Move       CameraMove   `json:"move"`
+	Zoom       float64      `json:"zoom"`
+	NormBBox   *visual.BBox `json:"norm_bbox,omitempty"`
+	Reason     string       `json:"reason"`
+	Reversal   bool         `json:"reversal,omitempty"`
+	Suppressed bool         `json:"suppressed,omitempty"`
 }
 
 // CameraPlan is the serializable camera section of cinematic_plan.json.
@@ -103,6 +104,7 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 	var prevZoomed bool
 	var prevBox *visual.BBox
 	var prevMove CameraMove
+	var prevZoom float64
 	zoomedStreak := 0
 	for i, sg := range ft.Segments {
 		dec := CameraDecision{SegmentIdx: i, SceneID: sg.SceneID, Kind: sg.Kind, Label: sg.Label, Zoom: sg.Zoom}
@@ -138,10 +140,12 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 			if cfg.ContinuityOn() && prevZoomed && d >= 0 && d < 0.12 && prevMove != CamStay {
 				// Same neighborhood: small reposition, not a new zoom.
 				dec.Move, dec.Zoom, dec.Reason = CamPan, zoom, "continuity-reposition"
+				dec.NormBBox = sg.NormBBox
 				break
 			}
 			if cfg.ContinuityOn() && prevZoomed && d >= 0.45 {
 				dec.Move, dec.Zoom, dec.Reason = CamPanZoom, zoom, "far-target-coherent-move"
+				dec.NormBBox = sg.NormBBox
 				break
 			}
 			if cfg.ContinuityOn() && zoomedStreak >= 2 && prevMove == CamZoomOut {
@@ -153,16 +157,36 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 				break
 			}
 			dec.Move, dec.Zoom, dec.Reason = CamZoom, zoom, "focused-action"
+			dec.NormBBox = sg.NormBBox
 			_ = attDec
 		case "speech", "hold":
 			if attDec.Strategy == AttContextRestore && prevZoomed && cfg.ContextRestoreOn() {
 				dec.Move, dec.Zoom, dec.Reason = CamContextRestore, 1, "context-restore"
 				break
 			}
-			// Narration and holds render full-frame (speech carries no
-			// bbox, so any inherited zoom would be dead metadata).
-			// Continuity lives in the decision trail, not in a zoom
-			// value the renderer cannot apply.
+			// Shot stability / continuity: if the camera is already zoomed in and
+			// the next action in this scene stays within the same region, maintain framing
+			// rather than collapsing to full-frame and re-zooming.
+			nextActionNearby := false
+			if prevZoomed && prevZoom > 1.01 && prevBox != nil && cfg.ContinuityOn() {
+				for j := i + 1; j < len(ft.Segments); j++ {
+					nextSg := ft.Segments[j]
+					if nextSg.SceneID != sg.SceneID {
+						break
+					}
+					if nextSg.Kind == "action" {
+						if nextSg.NormBBox != nil && distNorm(prevBox, nextSg.NormBBox) < 0.35 {
+							nextActionNearby = true
+						}
+						break
+					}
+				}
+			}
+			if nextActionNearby {
+				dec.Move, dec.Zoom, dec.Reason = CamStay, prevZoom, "continuity-shot-stability"
+				dec.NormBBox = prevBox
+				break
+			}
 			dec.Move, dec.Zoom, dec.Reason = CamStay, 1, "stable-read"
 		case "wait":
 			if sg.Compressed {
@@ -190,17 +214,25 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 			}
 			prevZoomed = true
 			prevBox = sg.NormBBox
+			prevZoom = dec.Zoom
 			plan.Changes++
 		} else if dec.Move == CamStay && prevZoomed && (sg.Kind == "speech" || sg.Kind == "hold") && dec.Zoom > 1 {
 			zoomedStreak++
 		} else if dec.Move == CamContextRestore || dec.Move == CamZoomOut {
 			prevZoomed = false
 			prevBox = nil
+			prevZoom = 1
 			zoomedStreak = 0
 			plan.Changes++
 		} else if dec.Move == CamPan {
 			plan.Changes++
 			prevBox = sg.NormBBox
+			prevZoom = dec.Zoom
+		} else if dec.Move == CamStay && dec.Zoom <= 1.01 {
+			prevZoomed = false
+			prevBox = nil
+			prevZoom = 1
+			zoomedStreak = 0
 		}
 		prevMove = dec.Move
 		plan.Decisions = append(plan.Decisions, dec)
@@ -252,18 +284,14 @@ func ApplyCamera(ft *timeline.FinalTimeline, plan *CameraPlan) int {
 			continue
 		}
 		sg := &ft.Segments[d.SegmentIdx]
-		if sg.Kind != "action" {
-			// Only action windows carry render-time zoom; speech/hold
-			// render full-frame by construction.
-			if sg.Zoom != 1 {
-				sg.Zoom = 1
-				n++
-			}
-			continue
-		}
 		want := d.Zoom
-		if d.Move == CamStay || d.Move == CamContextRestore || d.Move == CamZoomOut || d.Move == CamCut {
+		if d.Move == CamContextRestore || d.Move == CamZoomOut || d.Move == CamCut {
 			want = 1
+		} else if d.Move == CamStay && d.Zoom <= 1.01 {
+			want = 1
+		}
+		if d.NormBBox != nil && want > 1.01 {
+			sg.NormBBox = d.NormBBox
 		}
 		if sg.Zoom != want {
 			sg.Zoom = want
@@ -273,6 +301,39 @@ func ApplyCamera(ft *timeline.FinalTimeline, plan *CameraPlan) int {
 			n++
 		}
 	}
+
+	for i := range ft.Segments {
+		sg := &ft.Segments[i]
+		if sg.Zoom <= 1.01 || sg.NormBBox == nil {
+			sg.CameraTransition = ""
+			continue
+		}
+		prevZoomed := false
+		if i > 0 {
+			prev := &ft.Segments[i-1]
+			if prev.SceneID == sg.SceneID && prev.Zoom > 1.01 && prev.NormBBox != nil && distNorm(prev.NormBBox, sg.NormBBox) < 0.35 {
+				prevZoomed = true
+			}
+		}
+		nextZoomed := false
+		if i+1 < len(ft.Segments) {
+			next := &ft.Segments[i+1]
+			if next.SceneID == sg.SceneID && next.Zoom > 1.01 && next.NormBBox != nil && distNorm(sg.NormBBox, next.NormBBox) < 0.35 {
+				nextZoomed = true
+			}
+		}
+		switch {
+		case !prevZoomed && !nextZoomed:
+			sg.CameraTransition = "zoom_isolated"
+		case !prevZoomed && nextZoomed:
+			sg.CameraTransition = "zoom_in"
+		case prevZoomed && nextZoomed:
+			sg.CameraTransition = "zoom_stay"
+		case prevZoomed && !nextZoomed:
+			sg.CameraTransition = "zoom_out"
+		}
+	}
+
 	return n
 }
 

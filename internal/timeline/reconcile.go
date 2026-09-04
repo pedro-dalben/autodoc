@@ -36,23 +36,24 @@ func ParseActualEvents(records []capture.EventRecord) []ActualEvent {
 }
 
 type AVSegment struct {
-	SceneID      string       `json:"scene_id"`
-	BeatID       string       `json:"beat_id,omitempty"`
-	Kind         string       `json:"kind"`
-	Label        string       `json:"label"`
-	StartS       float64      `json:"start_s"`
-	DurS         float64      `json:"dur_s"`
-	VideoStartS  float64      `json:"video_start_s"`
-	VideoEndS    float64      `json:"video_end_s"`
-	Speed        float64      `json:"speed"`
-	ActionAtS    float64      `json:"action_at_s,omitempty"`
-	WavPath      string       `json:"wav_path,omitempty"`
-	Zoom         float64      `json:"zoom,omitempty"`
-	NormBBox     *visual.BBox `json:"norm_bbox,omitempty"`
-	Keyboard     bool         `json:"keyboard,omitempty"`
-	Compressed   bool         `json:"compressed,omitempty"`
-	Estimated    bool         `json:"estimated,omitempty"`
-	Compressible bool         `json:"compressible"`
+	SceneID          string       `json:"scene_id"`
+	BeatID           string       `json:"beat_id,omitempty"`
+	Kind             string       `json:"kind"`
+	Label            string       `json:"label"`
+	StartS           float64      `json:"start_s"`
+	DurS             float64      `json:"dur_s"`
+	VideoStartS      float64      `json:"video_start_s"`
+	VideoEndS        float64      `json:"video_end_s"`
+	Speed            float64      `json:"speed"`
+	ActionAtS        float64      `json:"action_at_s,omitempty"`
+	WavPath          string       `json:"wav_path,omitempty"`
+	Zoom             float64      `json:"zoom,omitempty"`
+	NormBBox         *visual.BBox `json:"norm_bbox,omitempty"`
+	CameraTransition string       `json:"camera_transition,omitempty"`
+	Keyboard         bool         `json:"keyboard,omitempty"`
+	Compressed       bool         `json:"compressed,omitempty"`
+	Estimated        bool         `json:"estimated,omitempty"`
+	Compressible     bool         `json:"compressible"`
 }
 
 type SyncItem struct {

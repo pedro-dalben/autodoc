@@ -175,6 +175,56 @@ func TestCameraContinuityAndSafety(t *testing.T) {
 	}
 }
 
+func TestCameraShotContinuityAndTransitions(t *testing.T) {
+	cfg := testCfg()
+	vis := visual.Default()
+	ft := &timeline.FinalTimeline{StoryboardHash: "h"}
+	ft.Segments = []timeline.AVSegment{
+		{SceneID: "s", Kind: "speech", Label: "intro", DurS: 1.0, Zoom: 1.0},
+		{SceneID: "s", Kind: "action", Label: "click a", DurS: 0.8, Zoom: 1.15, NormBBox: nb(0.1, 0.1, 0.1, 0.1)},
+		{SceneID: "s", Kind: "speech", Label: "explain a", DurS: 1.2, Zoom: 1.0},
+		{SceneID: "s", Kind: "action", Label: "fill a", DurS: 1.0, Zoom: 1.15, NormBBox: nb(0.12, 0.11, 0.1, 0.1)},
+		{SceneID: "s", Kind: "speech", Label: "finish", DurS: 1.0, Zoom: 1.0},
+	}
+	beats := []BeatPlan{
+		{Index: 0, SceneID: "s", ActionLabel: ""},
+		{Index: 1, SceneID: "s", ActionLabel: "click a"},
+		{Index: 2, SceneID: "s", ActionLabel: ""},
+		{Index: 3, SceneID: "s", ActionLabel: "fill a"},
+		{Index: 4, SceneID: "s", ActionLabel: ""},
+	}
+	att := &AttentionPlan{
+		Decisions: []AttentionDecision{
+			{BeatIndex: 4, Strategy: AttContextRestore},
+		},
+	}
+	cam := DirectCamera(ft, att, beats, cfg, vis)
+
+	// Segment 2 (speech between two actions in same region) should maintain framing
+	if cam.Decisions[2].Move != CamStay || cam.Decisions[2].Zoom <= 1.01 {
+		t.Fatalf("speech between nearby actions should maintain framing: %+v", cam.Decisions[2])
+	}
+	if cam.Decisions[2].Reason != "continuity-shot-stability" {
+		t.Errorf("expected continuity-shot-stability, got %s", cam.Decisions[2].Reason)
+	}
+
+	ApplyCamera(ft, cam)
+
+	// Verify transitions
+	if ft.Segments[1].CameraTransition != "zoom_in" {
+		t.Errorf("seg 1 transition should be zoom_in, got %s", ft.Segments[1].CameraTransition)
+	}
+	if ft.Segments[2].CameraTransition != "zoom_stay" {
+		t.Errorf("seg 2 transition should be zoom_stay, got %s", ft.Segments[2].CameraTransition)
+	}
+	if ft.Segments[3].CameraTransition != "zoom_out" {
+		t.Errorf("seg 3 transition should be zoom_out, got %s", ft.Segments[3].CameraTransition)
+	}
+	if ft.Segments[4].CameraTransition != "" {
+		t.Errorf("seg 4 transition should be empty, got %s", ft.Segments[4].CameraTransition)
+	}
+}
+
 func TestContextRestore(t *testing.T) {
 	cfg := testCfg()
 	beats := []BeatPlan{

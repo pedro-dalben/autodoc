@@ -3,6 +3,7 @@ package capture
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -230,6 +231,28 @@ func (b *PlaywrightBackend) parkCursor() {
 		return
 	}
 	target := b.parkPos()
+	ms := b.vis.Cursor.ParkMs
+	if ms <= 0 {
+		ms = 200
+	}
+	b.eval(visual.CursorMoveJS(b.cursor, target, ms))
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+	b.cursor = target
+}
+
+func (b *PlaywrightBackend) restCursor(near *visual.Point) {
+	if !b.vis.CursorOn() || !b.cursorInit {
+		return
+	}
+	var target visual.Point
+	if near != nil {
+		target = visual.Point{
+			X: math.Min(float64(b.vw-40), near.X+35),
+			Y: math.Min(float64(b.vh-40), near.Y+45),
+		}
+	} else {
+		target = b.parkPos()
+	}
 	ms := b.vis.Cursor.ParkMs
 	if ms <= 0 {
 		ms = 200
@@ -537,7 +560,7 @@ func (b *PlaywrightBackend) doType(a storyboard.Action, start int64) (ActionResu
 				return ActionResult{}, fmt.Errorf("clear %s: %w", sel, err)
 			}
 		}
-		delay := float64(b.vis.Typing.CharDelayMs)
+		delay := AdaptiveTypingDelay(value, b.vis.Typing.CharDelayMs)
 		if err := loc.PressSequentially(value, playwright.LocatorPressSequentiallyOptions{Delay: playwright.Float(delay)}); err != nil {
 			return ActionResult{}, fmt.Errorf("type %s: %w", sel, err)
 		}
@@ -726,7 +749,11 @@ func (b *PlaywrightBackend) ConfirmResult(t *storyboard.Target, holdMs int, labe
 func (b *PlaywrightBackend) DoSpeech(speechID string, durationMs int64) (ActionResult, error) {
 	start := b.nowMs()
 	b.ensureOverlay()
-	b.parkCursor()
+	if b.cursorInit {
+		b.restCursor(&b.cursor)
+	} else {
+		b.parkCursor()
+	}
 	b.recordV("speech_start", speechID, visual.VisualEvent{Type: "speech", SpeechID: speechID, StartedAtMs: start, DurationMs: durationMs})
 	if durationMs > 0 {
 		time.Sleep(time.Duration(durationMs) * time.Millisecond)
@@ -914,4 +941,30 @@ func (b *PlaywrightBackend) Close() error {
 		_ = b.pw.Stop()
 	}
 	return nil
+}
+
+// AdaptiveTypingDelay adjusts typing speed dynamically according to text length
+// and pacing so long passages don't drag while short entries remain readable.
+func AdaptiveTypingDelay(value string, baseDelay int) float64 {
+	if baseDelay <= 0 {
+		baseDelay = 55
+	}
+	n := len([]rune(value))
+	if n <= 15 {
+		return float64(baseDelay)
+	}
+	if n <= 35 {
+		// Medium text: 75% base delay, floor at 30ms
+		d := float64(baseDelay) * 0.75
+		if d < 30 {
+			d = 30
+		}
+		return d
+	}
+	// Long text: 50% base delay, floor at 18ms
+	d := float64(baseDelay) * 0.50
+	if d < 18 {
+		d = 18
+	}
+	return d
 }
