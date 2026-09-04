@@ -34,3 +34,12 @@ func TestBootstrapReusesLocalState(t *testing.T) {
 		}
 	}
 }
+
+func TestGuideIsScoped(t *testing.T) {
+	if got, ok := Guide("cinematic"); !ok || !strings.Contains(got, "director") {
+		t.Fatalf("bad guide: %q %t", got, ok)
+	}
+	if _, ok := Guide("everything"); ok {
+		t.Fatal("unknown guide must not produce a giant fallback")
+	}
+}

@@ -10,6 +10,22 @@ import (
 	"strings"
 )
 
+var guides = map[string]string{
+	"discovery":  "discovery: artifacts first; narrow route search; ui query once; ui diff after one action; retrieve raw evidence only by ref\n",
+	"storyboard": "storyboard: semantic ordered speech/action/wait/hold; stable locators; patch existing scenes; validate before TTS\n",
+	"auth":       "auth: reuse dedicated AutoDoc state; bootstrap off-camera with fixture credentials; never record login\n",
+	"recording":  "recording: run deterministic autodoc record; prefer scene retakes; never capture exploratory browser activity\n",
+	"cinematic":  "cinematic: declare intent/result targets; leave cursor, camera, pacing, and holds to the director unless an override is necessary\n",
+	"tts":        "tts: freeze narration before synthesis; unchanged segments are cache hits; keep provider keys in environment variables\n",
+	"publishing": "publishing: validate sync and cinematic QA, then export; publish docs/autodoc only, never workspace/auth artifacts\n",
+	"debug":      "debug: use the compact error code and evidence ref first; re-run the narrow failed stage before broad rediscovery\n",
+	"security":   "security: fixture data only; no secrets, tokens, passwords, cookies, or unnecessary PII in storyboards, evidence, logs, or frames\n",
+}
+
+// Guide returns one on-demand operational module. It deliberately remains
+// short: commands and deterministic validators hold the verbose detail.
+func Guide(topic string) (string, bool) { text, ok := guides[strings.ToLower(topic)]; return text, ok }
+
 // Mode is the narrow workflow required for a request.
 type Mode string
 

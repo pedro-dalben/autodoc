@@ -51,5 +51,6 @@ Cinematic Director unless a specific override is necessary. Use a declared
 Use `autodoc evidence get REF` for raw browser evidence and `autodoc context
 stats` for local byte/token estimates. Estimates are not provider usage.
 
-Detailed reference: `docs/storyboard.md`, `docs/cinematic-v2.md`,
-`docs/security.md`, and `docs/troubleshooting.md`—open only the topic needed.
+Use `autodoc agent guide discovery|storyboard|auth|recording|cinematic|tts|publishing|debug|security`
+for one small on-demand module. Open project docs only when that module is
+insufficient.

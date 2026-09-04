@@ -377,7 +377,15 @@ func newAgentCmd() *cobra.Command {
 		return nil
 	}}
 	status.Flags().StringVar(&capsulePath, "capsule", "", "capsule JSON path")
-	c.AddCommand(boot, create, status)
+	guide := &cobra.Command{Use: "guide <topic>", Short: "Read one small on-demand workflow module", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		text, ok := agent.Guide(args[0])
+		if !ok {
+			return fmt.Errorf("unknown guide %q (discovery|storyboard|auth|recording|cinematic|tts|publishing|debug|security)", args[0])
+		}
+		fmt.Fprint(cmd.OutOrStdout(), text)
+		return nil
+	}}
+	c.AddCommand(boot, create, status, guide)
 	return c
 }
 
