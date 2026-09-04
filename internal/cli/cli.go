@@ -1271,7 +1271,7 @@ func newExplainCmd() *cobra.Command {
 				}
 				var runs []string
 				for _, e := range entries {
-					if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+					if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && e.Name() != "screenshots" {
 						runs = append(runs, e.Name())
 					}
 				}
@@ -1279,7 +1279,16 @@ func newExplainCmd() *cobra.Command {
 				if len(runs) == 0 {
 					return fmt.Errorf("no run directories found in %s", workDir)
 				}
-				rDir = filepath.Join(workDir, runs[len(runs)-1])
+				for i := len(runs) - 1; i >= 0; i-- {
+					dir := filepath.Join(workDir, runs[i])
+					if _, err := os.Stat(filepath.Join(dir, "cinematic_plan.json")); err == nil {
+						rDir = dir
+						break
+					}
+				}
+				if rDir == "" {
+					rDir = filepath.Join(workDir, runs[len(runs)-1])
+				}
 			}
 			exps, text, err := cinematic.ExplainRun(rDir, sceneFilter)
 			if err != nil {

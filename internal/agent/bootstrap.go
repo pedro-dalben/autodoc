@@ -169,16 +169,23 @@ func DetectState(root, sbPath string) StateSummary {
 	// Check latest run in .autodoc/_work/
 	workDir := filepath.Join(root, ".autodoc", "_work")
 	var latestRun string
+	var runs []string
 	if entries, err := os.ReadDir(workDir); err == nil {
-		var runs []string
 		for _, e := range entries {
-			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && e.Name() != "screenshots" {
 				runs = append(runs, e.Name())
 			}
 		}
 		sort.Strings(runs)
 		if len(runs) > 0 {
 			latestRun = filepath.Join(workDir, runs[len(runs)-1])
+			for i := len(runs) - 1; i >= 0; i-- {
+				dir := filepath.Join(workDir, runs[i])
+				if exists(filepath.Join(dir, "tutorial.mp4")) {
+					latestRun = dir
+					break
+				}
+			}
 			sum.LatestRunDir = latestRun
 		}
 	}
@@ -192,18 +199,42 @@ func DetectState(root, sbPath string) StateSummary {
 			hasVideo = true
 			sum.VideoPath = mp4Path
 		}
-		qaReportPath := filepath.Join(latestRun, "qa_report.json")
-		if exists(qaReportPath) {
-			hasQA = true
-			sum.QAPath = qaReportPath
+		for _, qName := range []string{"cinematic_report.json", "qa_report.json"} {
+			p := filepath.Join(latestRun, qName)
+			if exists(p) {
+				hasQA = true
+				sum.QAPath = p
+				break
+			}
 		}
-		videoDir := filepath.Join(latestRun, "video")
-		if ves, err := os.ReadDir(videoDir); err == nil {
-			for _, ve := range ves {
-				if strings.HasSuffix(ve.Name(), ".webm") {
-					hasCaptures = true
+		if !hasQA {
+			for _, rName := range runs {
+				dir := filepath.Join(workDir, rName)
+				for _, qName := range []string{"cinematic_report.json", "qa_report.json"} {
+					p := filepath.Join(dir, qName)
+					if exists(p) {
+						hasQA = true
+						sum.QAPath = p
+						break
+					}
+				}
+				if hasQA {
 					break
 				}
+			}
+		}
+		for _, sub := range []string{"raw", "video"} {
+			captureDir := filepath.Join(latestRun, sub)
+			if ves, err := os.ReadDir(captureDir); err == nil {
+				for _, ve := range ves {
+					if strings.HasSuffix(ve.Name(), ".webm") || strings.HasSuffix(ve.Name(), ".mp4") {
+						hasCaptures = true
+						break
+					}
+				}
+			}
+			if hasCaptures {
+				break
 			}
 		}
 	}
@@ -225,7 +256,7 @@ func DetectState(root, sbPath string) StateSummary {
 	case hasCaptures:
 		sum.State = StateRecorded
 		sum.NextAction = "Scenes captured. Reconcile and render cinematic tutorial."
-		sum.NextCommands = []string{"autodoc render --storyboard " + sbTarget + " --cinematic"}
+		sum.NextCommands = []string{"autodoc render --storyboard " + sbTarget}
 	case sum.StoryboardPath != "":
 		recipePath := ""
 		if latestRun != "" && exists(filepath.Join(latestRun, "recipe.json")) {

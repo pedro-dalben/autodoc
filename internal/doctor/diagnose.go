@@ -53,14 +53,21 @@ func Diagnose(root string) *DiagnosisReport {
 	if entries, err := os.ReadDir(workDir); err == nil {
 		var runs []string
 		for _, e := range entries {
-			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && e.Name() != "screenshots" {
 				runs = append(runs, e.Name())
 			}
 		}
 		sort.Strings(runs)
 		if len(runs) > 0 {
 			latest := filepath.Join(workDir, runs[len(runs)-1])
-			rSec := Section{Name: fmt.Sprintf("Latest Run (%s)", runs[len(runs)-1])}
+			for i := len(runs) - 1; i >= 0; i-- {
+				dir := filepath.Join(workDir, runs[i])
+				if _, err := os.Stat(filepath.Join(dir, "tutorial.mp4")); err == nil {
+					latest = dir
+					break
+				}
+			}
+			rSec := Section{Name: fmt.Sprintf("Latest Run (%s)", filepath.Base(latest))}
 
 			// Check tutorial.mp4
 			if _, err := os.Stat(filepath.Join(latest, "tutorial.mp4")); err == nil {
@@ -70,16 +77,33 @@ func Diagnose(root string) *DiagnosisReport {
 			}
 
 			// Check QA report
-			qaPath := filepath.Join(latest, "qa_report.json")
+			qaPath := filepath.Join(latest, "cinematic_report.json")
+			if _, err := os.Stat(qaPath); err != nil {
+				qaPath = filepath.Join(latest, "qa_report.json")
+			}
+			if _, err := os.Stat(qaPath); err != nil {
+				for _, rName := range runs {
+					dir := filepath.Join(workDir, rName)
+					for _, cand := range []string{"cinematic_report.json", "qa_report.json"} {
+						p := filepath.Join(dir, cand)
+						if _, err := os.Stat(p); err == nil {
+							qaPath = p
+							break
+						}
+					}
+				}
+			}
 			if b, err := os.ReadFile(qaPath); err == nil {
 				var doc struct {
 					Passed      bool     `json:"passed"`
+					Pass        bool     `json:"pass"`
 					FatalErrors []string `json:"fatal_errors,omitempty"`
 					Warnings    []string `json:"warnings,omitempty"`
 					MaxDriftMs  float64  `json:"max_drift_ms,omitempty"`
 				}
 				if json.Unmarshal(b, &doc) == nil {
-					if doc.Passed {
+					passed := doc.Passed || doc.Pass
+					if passed {
 						rSec.Checks = append(rSec.Checks, ok("qa_report", "cinematic QA passed"))
 					} else {
 						rSec.Checks = append(rSec.Checks, fail("qa_report", strings.Join(doc.FatalErrors, "; ")))
