@@ -150,22 +150,35 @@ func TestCinematicV2Director(t *testing.T) {
 		t.Fatalf("result must hold >= 800ms, got %.2fs", sendSeg.DurS)
 	}
 
-	// 7. Dead-time editing: the artificial 1.8s send latency compresses.
+	// 7. Dead-time editing: the delayed receipt compresses honestly.
 	compressed := false
 	for _, sg := range ft.Segments {
-		if sg.Kind == "wait" && sg.DurS < 1.5 {
-			compressed = true
+		if sg.Kind == "wait" && strings.Contains(sg.Label, "visible") {
+			t.Logf("wait seg: label=%s dur=%.2f", sg.Label, sg.DurS)
 		}
 	}
-	_ = compressed // compression depends on measured latency; EDL records the decision either way
 	editRaw, _ := os.ReadFile(filepath.Join(runDir, "edit_plan.json"))
 	var edit struct {
-		Clips []struct {
-			Type     string `json:"type"`
-			Strategy string `json:"strategy"`
+		WaitsSavedMs int `json:"waits_saved_ms"`
+		Clips        []struct {
+			Type     string  `json:"type"`
+			Strategy string  `json:"strategy"`
+			Label    string  `json:"label"`
+			Speed    float64 `json:"speed"`
 		} `json:"clips"`
 	}
 	_ = json.Unmarshal(editRaw, &edit)
+	for _, c := range edit.Clips {
+		if c.Type == "transition" && (c.Strategy == "compress" || c.Strategy == "speed_ramp") {
+			compressed = true
+		}
+	}
+	if !compressed {
+		t.Fatalf("artificial loading wait must compress; edit plan: %+v", edit.Clips)
+	}
+	if edit.WaitsSavedMs <= 0 {
+		t.Fatalf("expected saved wait ms > 0, got %d", edit.WaitsSavedMs)
+	}
 	clipTypes := map[string]bool{}
 	for _, c := range edit.Clips {
 		clipTypes[c.Type] = true

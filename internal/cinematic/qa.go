@@ -85,9 +85,10 @@ func RunQA(ft *timeline.FinalTimeline, scenes *ScenePlanDoc, att *AttentionPlan,
 	gate("visual-anchors", anchorPass, fmt.Sprintf("%d/%d narration beats anchored", anchored, narr), fmt.Sprintf("%d/%d", anchored, narr), fmt.Sprintf("%d/%d", narr, narr))
 
 	// 4. Action anticipation: every anticipation-demanding beat directed.
+	// Explicit "none" overrides are authorial intent, not failures.
 	need, got := 0, 0
 	for _, b := range scenes.Beats {
-		if b.NeedsAnticipation {
+		if b.NeedsAnticipation && b.AttentionOverride != "none" && b.CameraOverride != "none" {
 			need++
 			for _, d := range att.Decisions {
 				if d.BeatIndex == b.Index && d.Anticipate {

@@ -59,7 +59,7 @@ scenes:
         sequence:
           - speech:
               text: "Na lateral esquerda estão as suas conversas."
-              anchor: viewport
+              anchor: conversation-list
           - speech:
               text: "Para começar, selecione a conversa desejada."
           - action:
@@ -103,6 +103,7 @@ scenes:
               timeout_ms: 10000
           - speech:
               text: "O comprovante da mensagem chega em seguida."
+              anchor: viewport
           - wait:
               state: visible
               target:
@@ -110,6 +111,7 @@ scenes:
               timeout_ms: 10000
           - speech:
               text: "Pronto! A mensagem foi enviada com sucesso."
+              anchor: viewport
           - hold:
               duration_ms: 600
       - id: beat-04
