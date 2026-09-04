@@ -361,8 +361,6 @@ func (b *PlaywrightBackend) cueFocus(sel string, loc playwright.Locator, act *st
 		// Anticipation envelope: target reveal -> cursor approach ->
 		// stabilization. Highlight covers the whole envelope so the
 		// viewer sees intent before motion.
-		approachMax := c.Anticipation.ApproachMs
-		_ = approachMax
 		total := c.Anticipation.RevealMs + 450 + c.Anticipation.SettleMs
 		if b.vis.HiliteOn() {
 			b.highlight(bb, total+400)
