@@ -217,12 +217,33 @@ Outputs under `docs/autodoc/<tutorial>/`:
 
 ```bash
 autodoc validate --storyboard storyboard.yml --sync
+autodoc validate --storyboard storyboard.yml --cinematic
 autodoc doctor
 ```
 
 Check: MP4 plays (H.264/AAC), resolution correct, duration coherent with
 `final_timeline.json`, subtitles in sync, no secret sentinels in any
-artifact, screenshots present, sync report PASS.
+artifact, screenshots present, sync report PASS, cinematic QA PASS
+(12 director gates + diagnostic score). Workspace debug artifacts
+(`scene_plan.json`, `cinematic_plan.json`, `edit_plan.json`,
+`cinematic_report.json`) stay under `.autodoc/_work/` — never publish
+them to `docs/autodoc/`.
+
+## Cinematic V2 direction (automatic, safe defaults)
+
+The recorder is an AI Director, not just a capture tool: anticipation
+envelopes precede important actions, a subtle spotlight may emphasize the
+anchor (never covering modals), the camera keeps continuity and restores
+context, declared `result_target:` outcomes are confirmed and held, and
+loading waits are classified/compressed. You stay semantic: no
+coordinates, no zoom levels, no timings. Useful storyboard hints:
+
+- `speech: {anchor: viewport}` for full-context narration.
+- `action: {callout: "1. Escolha a conversa"}` (only when the tutorial
+  enables `cinematic.callouts`).
+- `action: {result_target: {test_id: …}}` for outcomes the viewer must see.
+- `attention: none` / `camera: stay` only for special cases (tiny icons).
+- Never narrate mouse movement or camera motion; explain intent + result.
 
 ## Safety checklist (before every record)
 

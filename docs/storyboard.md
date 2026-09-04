@@ -84,6 +84,36 @@ never carry coordinates. An optional top-level `visuals:` block overrides
 cursor/click/typing/camera/pacing/sync defaults; omit it for the tuned
 defaults.
 
+## Cinematic V2 — AI Director (default, safe)
+
+On top of V1, the AI Director plans semantic beats (see
+`docs/cinematic-v2.md`): anticipation envelopes (reveal → approach →
+settle) precede important actions, a subtle spotlight can de-emphasize
+non-relevant regions (never covering modals, always `pointer-events:
+none`), the camera keeps continuity across beats and restores full
+context afterwards, declared `result_target:` outcomes are confirmed and
+held, and long loading waits are classified and compressed. Storyboards
+without a `cinematic:` block get safe defaults automatically (director
+on, callouts/sound off). Overrides:
+
+```yaml
+cinematic:
+  director: true
+  attention: {enabled: true, spotlight: true}
+  camera: {continuity: true, context_restore: true, max_zoom: 1.25}
+  anticipation: {enabled: true}
+  results: {confirmation: true, min_hold_ms: 1000}
+  editing: {compress_dead_time: true}
+  callouts: {enabled: false}  # opt-in; per-action `callout: "1. …"`
+  sound: {enabled: false}     # infra only
+```
+
+Per-action: `camera: stay|focus|contextual|none`, `attention: …|none`,
+`result_target:`, `result_hold_ms:`, `callout:`, `no_anticipation:`.
+Per-speech pacing (never content rewriting): `pause_before_ms:`,
+`pause_after_ms:`, `anchor:`. `autodoc validate --cinematic` reports the
+12 director gates plus a diagnostic score.
+
 ## Off-camera setup
 
 ```yaml
