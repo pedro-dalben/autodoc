@@ -43,6 +43,10 @@ func NewRoot() *cobra.Command {
 		newValidateCmd(),
 		newAuthCmd(),
 		newBrowserCmd(),
+		newUICmd(),
+		newEvidenceCmd(),
+		newContextCmd(),
+		newAgentCmd(),
 		newMCPCmd(),
 		newUninstallCmd(),
 		newVersionCmd(),
@@ -963,6 +967,7 @@ func registerMCPTools(s *mcp.Server) {
 			rep := doctor.Run()
 			return rep, nil
 		})
+	registerInspectMCPTools(s)
 }
 
 func resolveFromCwd(sbPath string) (string, *config.Config, string, error) {
