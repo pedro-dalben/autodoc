@@ -93,6 +93,7 @@ autodoc record     --storyboard storyboard.yml   # scene-*.webm + events-*.jsonl
 autodoc render     --storyboard storyboard.yml   # tutorial.mp4 (H.264 + AAC)
 autodoc export     --storyboard storyboard.yml   # docs/autodoc/<tutorial>/
 autodoc validate   --storyboard storyboard.yml   # coherence check
+autodoc validate   --storyboard storyboard.yml --cinematic  # AI Director QA (12 gates + score)
 ```
 
 Re-record just one scene after a UI change:
