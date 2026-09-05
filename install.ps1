@@ -41,12 +41,13 @@ $AssetVer = $Version
 if ($AssetVer.StartsWith("v")) { $AssetVer = $AssetVer.Substring(1) }
 $Asset = "autodoc_${AssetVer}_windows_${Arch}.zip"
 $Base = "https://github.com/$Repo/releases/download/$Version"
+$Tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("autodoc-install-" + [System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 try {
   Write-Host "==> autodoc $Version (windows/$Arch)"
   try {
-    Invoke-WebRequest "$Base/$Asset" -OutFile "$Tmp\autodoc.zip"
-    Invoke-WebRequest "$Base/checksums.txt" -OutFile "$Tmp\checksums.txt"
+    Invoke-WebRequest "$Base/$Asset" -OutFile "$Tmp\autodoc.zip" -MaximumRetryCount 3 -RetryIntervalSec 2
+    Invoke-WebRequest "$Base/checksums.txt" -OutFile "$Tmp\checksums.txt" -MaximumRetryCount 3 -RetryIntervalSec 2
   } catch {
     Write-Error "download failed: $Base/$Asset not found (bad version or unsupported platform?)"
     exit 1
