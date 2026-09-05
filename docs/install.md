@@ -4,7 +4,20 @@
 
 No Go toolchain needed.
 
-Linux or macOS:
+> No stable release exists yet. The current release candidate is
+> `v0.1.0-rc.1` (pre-release, for real-world validation before `v0.1.0`).
+> Install it explicitly pinned — a bare install resolves `latest stable`
+> and will refuse while only pre-releases exist:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh -s -- --version v0.1.0-rc.1
+```
+
+```powershell
+.\install.ps1 -Version v0.1.0-rc.1
+```
+
+Linux or macOS (stable releases only, once they exist):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh
@@ -25,11 +38,11 @@ prints the exact line to add.
 Reproducible install of a specific version:
 
 ```bash
-curl -fsSL .../install.sh | sh -s -- --version v0.1.0
+curl -fsSL .../install.sh | sh -s -- --version v0.1.0-rc.1
 ```
 
 ```powershell
-.\install.ps1 -Version v0.1.0
+.\install.ps1 -Version v0.1.0-rc.1
 ```
 
 Supported platforms (these are the archives GoReleaser builds):
@@ -38,8 +51,9 @@ Supported platforms (these are the archives GoReleaser builds):
 - macOS amd64 and arm64
 - Windows amd64
 
-Releases are cut from version tags (`vX.Y.Z`) by GitHub Actions; each release
-publishes archives plus `checksums.txt`. See [release.md](release.md).
+Releases are cut from version tags (`vX.Y.Z`, pre-releases as `vX.Y.Z-rc.N`)
+by GitHub Actions; each release publishes archives plus `checksums.txt`.
+See [release.md](release.md).
 
 ## Requirements
 
