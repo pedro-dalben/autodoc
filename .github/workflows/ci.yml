@@ -22,5 +22,7 @@ jobs:
         run: go vet ./...
       - name: Unit and integration tests
         run: go test ./internal/... -count=1
+      - name: Installer and docs smoke tests
+        run: go test ./test/smoke/ -count=1
       - name: Build
         run: go build ./...
