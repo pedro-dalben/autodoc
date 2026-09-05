@@ -26,11 +26,14 @@ $Arch = switch ($env:PROCESSOR_ARCHITECTURE) {
 }
 
 if ($Version -eq "vlatest") {
+  # GitHub's /releases/latest endpoint only serves stable releases, never
+  # pre-releases. While AutoDoc has no stable release yet, install the
+  # release candidate explicitly instead of relying on "latest".
   try {
     $latest = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
     $Version = $latest.tag_name
   } catch {
-    Write-Error "could not resolve latest release (network error or no release yet)"
+    Write-Error "no stable AutoDoc release is available yet (only pre-releases). Install the release candidate explicitly: .\install.ps1 -Version <tag> (see https://github.com/$Repo/releases and docs/install.md)"
     exit 1
   }
 }

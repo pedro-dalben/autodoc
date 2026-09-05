@@ -68,16 +68,20 @@ if [ "$OS" = "windows" ]; then
 fi
 
 if [ "$VERSION" = "latest" ]; then
+  # GitHub's /releases/latest endpoint only serves stable releases, never
+  # pre-releases. While AutoDoc has no stable release yet, install the
+  # release candidate explicitly instead of relying on "latest".
+  NO_STABLE="no stable AutoDoc release is available yet (only pre-releases). Install the release candidate explicitly: AUTODOC_VERSION=<tag> sh install.sh (see https://github.com/$REPO/releases and docs/install.md)"
   command -v grep >/dev/null 2>&1 || fail "grep not found (needed to resolve the latest version)"
   if command -v curl >/dev/null 2>&1; then
     TAG_JSON="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")" || \
-      fail "could not resolve latest release (network error or no release yet)"
+      fail "$NO_STABLE"
   else
     TAG_JSON="$(wget -q -O - "https://api.github.com/repos/$REPO/releases/latest")" || \
-      fail "could not resolve latest release (network error or no release yet)"
+      fail "$NO_STABLE"
   fi
   VERSION="$(printf '%s' "$TAG_JSON" | grep '"tag_name":' | head -1 | cut -d'"' -f4)"
-  [ -n "$VERSION" ] || fail "could not parse latest release tag (no release published yet?)"
+  [ -n "$VERSION" ] || fail "could not parse latest release tag ($NO_STABLE)"
 fi
 case "$VERSION" in
   v*) ;;
