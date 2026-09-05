@@ -5,16 +5,16 @@
 No Go toolchain needed.
 
 > No stable release exists yet. The current release candidate is
-> `v0.1.0-rc.1` (pre-release, for real-world validation before `v0.1.0`).
+> `v0.1.0-rc.2` (pre-release, for real-world validation before `v0.1.0`).
 > Install it explicitly pinned — a bare install resolves `latest stable`
 > and will refuse while only pre-releases exist:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh -s -- --version v0.1.0-rc.1
+curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh -s -- --version v0.1.0-rc.2
 ```
 
 ```powershell
-.\install.ps1 -Version v0.1.0-rc.1
+.\install.ps1 -Version v0.1.0-rc.2
 ```
 
 Linux or macOS (stable releases only, once they exist):
@@ -38,11 +38,11 @@ prints the exact line to add.
 Reproducible install of a specific version:
 
 ```bash
-curl -fsSL .../install.sh | sh -s -- --version v0.1.0-rc.1
+curl -fsSL .../install.sh | sh -s -- --version v0.1.0-rc.2
 ```
 
 ```powershell
-.\install.ps1 -Version v0.1.0-rc.1
+.\install.ps1 -Version v0.1.0-rc.2
 ```
 
 Supported platforms (these are the archives GoReleaser builds):

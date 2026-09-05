@@ -36,9 +36,8 @@ jobs:
           "$RUNNER_TEMP/autodoc-bin/autodoc" --help > /dev/null
       - name: Explicit checksum validation
         run: |
-          cd "$RUNNER_TEMP"
+          ASSET="autodoc_${VERSION#v}_linux_$(uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/').tar.gz"
           curl -fsSL "https://github.com/${{ github.repository }}/releases/download/$VERSION/checksums.txt" -o checksums.txt
-          ASSET="autodoc_${VERSION}_linux_$(uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/').tar.gz"
           curl -fsSL "https://github.com/${{ github.repository }}/releases/download/$VERSION/$ASSET" -o "$ASSET"
           grep " $ASSET\$" checksums.txt > check-one.txt
           sha256sum -c check-one.txt
@@ -70,8 +69,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           curl -fsSL "https://github.com/${{ github.repository }}/releases/download/$VERSION/checksums.txt" -o checksums.txt
-          ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/arm64/arm64/')"
-          ASSET="autodoc_${VERSION}_darwin_${ARCH}.tar.gz"
+          ASSET="autodoc_${VERSION#v}_darwin_${ARCH}.tar.gz"
           curl -fsSL "https://github.com/${{ github.repository }}/releases/download/$VERSION/$ASSET" -o "$ASSET"
           grep " $ASSET\$" checksums.txt > check-one.txt
           (command -v sha256sum > /dev/null && sha256sum -c check-one.txt) || shasum -a 256 -c check-one.txt
@@ -97,7 +95,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $arch = switch ($env:PROCESSOR_ARCHITECTURE) { "AMD64" { "amd64" } "ARM64" { "arm64" } default { throw "unsupported arch" } }
-          $asset = "autodoc_$env:VERSION`_windows_$arch.zip"
+          $assetVer = $env:VERSION
+          if ($assetVer.StartsWith("v")) { $assetVer = $assetVer.Substring(1) }
+          $asset = "autodoc_${assetVer}_windows_$arch.zip"
           $base = "https://github.com/${{ github.repository }}/releases/download/$env:VERSION"
           Invoke-WebRequest "$base/$asset" -OutFile "$env:RUNNER_TEMP\$asset"
           Invoke-WebRequest "$base/checksums.txt" -OutFile "$env:RUNNER_TEMP\checksums.txt"

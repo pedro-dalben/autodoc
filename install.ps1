@@ -37,10 +37,10 @@ if ($Version -eq "vlatest") {
     exit 1
   }
 }
-
-$Asset = "autodoc_${Version}_windows_${Arch}.zip"
+$AssetVer = $Version
+if ($AssetVer.StartsWith("v")) { $AssetVer = $AssetVer.Substring(1) }
+$Asset = "autodoc_${AssetVer}_windows_${Arch}.zip"
 $Base = "https://github.com/$Repo/releases/download/$Version"
-$Tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("autodoc-install-" + [System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 try {
   Write-Host "==> autodoc $Version (windows/$Arch)"

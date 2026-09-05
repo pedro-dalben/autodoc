@@ -88,7 +88,8 @@ case "$VERSION" in
   *) VERSION="v$VERSION" ;;
 esac
 
-ASSET="autodoc_${VERSION}_${OS}_${ARCH}.tar.gz"
+ASSET_VER="${VERSION#v}"
+ASSET="autodoc_${ASSET_VER}_${OS}_${ARCH}.tar.gz"
 BASE="$RELEASE_BASE/$REPO/releases/download/$VERSION"
 
 TMP="$(mktemp -d)"

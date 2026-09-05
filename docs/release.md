@@ -6,16 +6,16 @@ Tags use SemVer: `vX.Y.Z` for stable, `vX.Y.Z-rc.N` for release
 candidates. The binary reports the tag it was built from
 (`autodoc version`); untagged builds report `0.1.0` with commit `dev`.
 
-No stable release exists yet. The current pre-release is `v0.1.0-rc.1`,
+No stable release exists yet. The current pre-release is `v0.1.0-rc.2`,
 published for real-world validation before `v0.1.0`. A pre-release is
 never presented as `latest stable`: install it explicitly pinned
-(`AUTODOC_VERSION=v0.1.0-rc.1`), see [install.md](install.md).
+(`AUTODOC_VERSION=v0.1.0-rc.2`), see [install.md](install.md).
 
 ## Cutting a release candidate
 
 ```bash
-git tag -a v0.1.0-rc.1 -m "AutoDoc v0.1.0-rc.1"
-git push origin v0.1.0-rc.1
+git tag -a v0.1.0-rc.2 -m "AutoDoc v0.1.0-rc.2"
+git push origin v0.1.0-rc.2
 ```
 
 Never rewrite a published tag. If the RC is broken after publication,

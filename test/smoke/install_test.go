@@ -66,7 +66,9 @@ func fakeRelease(t *testing.T, version string, tamper bool) (base string, instal
 	if err := os.MkdirAll(assetDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	asset := "autodoc_" + version + "_linux_amd64.tar.gz"
+	// GoReleaser strips the leading v from asset names
+	// (autodoc_0.1.0_linux_amd64.tar.gz for tag v0.1.0).
+	asset := "autodoc_" + strings.TrimPrefix(version, "v") + "_linux_amd64.tar.gz"
 	tar := exec.Command("tar", "-czf", filepath.Join(assetDir, asset), "-C", binDir, "autodoc")
 	if out, err := tar.CombinedOutput(); err != nil {
 		t.Fatalf("tar: %v\n%s", err, out)
