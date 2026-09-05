@@ -994,6 +994,7 @@ func registerMCPTools(s *mcp.Server) {
 			return rep, nil
 		})
 	registerInspectMCPTools(s)
+	registerDirectionMCPTools(s)
 }
 
 func resolveFromCwd(sbPath string) (string, *config.Config, string, error) {

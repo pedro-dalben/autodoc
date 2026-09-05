@@ -46,6 +46,12 @@ their real order. Leave camera, cursor, zoom, pacing, and result holds to the
 Cinematic Director unless a specific override is necessary. Use a declared
 `result_target` when the user must see a result.
 
+Respect explicit cinematic user directions (e.g. "sem zoom", "strong zoom on
+the form", "show keyboard shortcuts"): put semantic intent in storyboard
+`direction:` blocks (tutorial/scene/action; unset stays `auto`). Query the
+`cinematic_capabilities` MCP tool only when you need the control vocabulary;
+preview with `direction_plan`. Precedence: action>scene>tutorial>preset>director.
+
 ## Escalation
 
 Use `autodoc evidence get REF` for raw browser evidence and `autodoc context

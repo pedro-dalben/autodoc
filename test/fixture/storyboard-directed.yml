@@ -1,0 +1,75 @@
+version: 2
+meta:
+  title: "Como acessar sua conta"
+  description: "Tutorial fixture: login dirigido (zoom forte no formulário, sem spotlight, teclado visível)"
+  language: "pt-BR"
+  resolution: "1280x720"
+  fps: 30
+config:
+  base_url: "http://localhost:8099"
+  viewport_width: 1280
+  viewport_height: 720
+setup:
+  start_url: "/login"
+  expected_states:
+    - description: "login form visible"
+      state: visible
+      timeout_ms: 8000
+# Tutorial-level direction: explicit intent, automatic execution.
+direction:
+  cursor: show
+  click: strong
+  keyboard: shortcuts
+  spotlight: off
+redact:
+  selectors: []
+  mask_password_inputs: true
+scenes:
+  - id: login
+    title: "Acesse sua conta"
+    url: "/login"
+    screenshot: true
+    # Scene-level direction: strong zoom pinned on the form.
+    direction:
+      zoom: strong
+      camera: focus
+      camera_lock: on
+      focus: outline
+    beats:
+      - id: beat-01
+        sequence:
+          - speech:
+              text: "Comece na tela de acesso."
+          - action:
+              type: fill
+              target:
+                test_id: login-email
+              value: "demo@example.com"
+          - action:
+              type: fill
+              target:
+                test_id: login-password
+              value: "demo1234"
+              # Action-level direction: slow typing only for the password.
+              direction:
+                typing: slow
+          - speech:
+              text: "Confirme com Enter e pronto."
+          - action:
+              type: press
+              key: Enter
+          - wait:
+              state: visible
+              target:
+                test_id: home-welcome
+              timeout_ms: 10000
+  - id: home
+    title: "Tela inicial"
+    url: "/home"
+    beats:
+      - id: beat-01
+        sequence:
+          - speech:
+              text: "Pronto! Esta é a tela inicial do sistema."
+          - hold:
+              duration_ms: 900
