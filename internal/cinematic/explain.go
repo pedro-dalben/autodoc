@@ -105,6 +105,15 @@ func ExplainRun(runDir, sceneFilter string) ([]SceneDirectorExplanation, string,
 		fmt.Fprintf(&out, "Global adjustments: %d camera segments modified, %dms result holds added\n\n",
 			plan.CameraAdjusted, plan.HoldsAddedMs)
 	}
+	if len(plan.Resolved) > 0 {
+		out.WriteString("Tutorial direction\n")
+		out.WriteString(FormatResolved(filterResolved(plan.Resolved, sceneFilter)))
+		out.WriteString("\n")
+	}
+	if plan.Compliance != nil && plan.Compliance.Requested > 0 {
+		out.WriteString(plan.Compliance.Print())
+		out.WriteString("\n")
+	}
 
 	for _, sc := range scenes {
 		cams := camByScene[sc]
@@ -114,8 +123,10 @@ func ExplainRun(runDir, sceneFilter string) ([]SceneDirectorExplanation, string,
 			Camera:    cams,
 			Attention: atts,
 		}
-
-		fmt.Fprintf(&out, "=== Scene: %s ===\n", sc)
+		if sceneFilter != "" && sc != sceneFilter {
+			res = append(res, exp)
+			continue
+		}
 		if len(cams) > 0 {
 			out.WriteString("  Camera Decisions:\n")
 			for _, c := range cams {
@@ -150,4 +161,18 @@ func ExplainRun(runDir, sceneFilter string) ([]SceneDirectorExplanation, string,
 	}
 
 	return res, out.String(), nil
+}
+
+// filterResolved narrows the resolved direction to one scene when asked.
+func filterResolved(res []ResolvedBeat, sceneFilter string) []ResolvedBeat {
+	if sceneFilter == "" {
+		return res
+	}
+	out := res[:0]
+	for _, r := range res {
+		if r.SceneID == sceneFilter {
+			out = append(out, r)
+		}
+	}
+	return out
 }

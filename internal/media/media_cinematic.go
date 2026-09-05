@@ -105,8 +105,9 @@ func RenderCinematic(ft *timeline.FinalTimeline, opts CinematicOptions) error {
 	if len(ft.Speeches) > 0 {
 		filter += ";" + strings.Join(filterParts, ";") + ";" + strings.Join(amixInputs, "") + fmt.Sprintf("amix=inputs=%d:normalize=0:duration=longest:dropout_transition=0[aout]", len(ft.Speeches))
 	} else {
-		args = append(args, "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo")
-		filter += fmt.Sprintf(";[%d:a]anullsrc[aout]", nVideo)
+		// Speechless timeline: synthesize silence as a filter source
+		// (anullsrc takes no input) trimmed to the video length.
+		filter += fmt.Sprintf(";anullsrc=r=44100:cl=stereo,atrim=0:%.3f[aout]", ft.TotalS+0.5)
 	}
 	args = append(args,
 		"-filter_complex", filter,
@@ -149,13 +150,51 @@ func segmentVideoChain(sg timeline.AVSegment, rawDur float64, w, h int, zoomOK b
 	if sg.Speed > 1.01 {
 		fmt.Fprintf(&b, ",setpts=(PTS-STARTPTS)/%.4f", sg.Speed)
 	}
+	// Target outlines (explicit focus / result emphasis) compose in source
+	// space BEFORE the zoom crop so they hug the target through the move.
+	if sg.Outline && sg.NormBBox != nil {
+		b.WriteString("," + outlineBox(sg, 4))
+	}
+	if sg.ResultFlash {
+		if sg.NormBBox != nil {
+			b.WriteString("," + outlineBox(sg, 2))
+		}
+		b.WriteString(",eq=brightness=0.05")
+	}
 	if zoomOK && sg.Zoom > 1.01 && sg.NormBBox != nil {
 		if z := zoomChain(sg, w, h); z != "" {
 			b.WriteString("," + z)
 		}
 	}
+	// Keyboard pill stays fixed in output space (after zoom): bottom-center
+	// safe area above the subtitle band.
+	if sg.Keyboard {
+		b.WriteString("," + keyboardPill(sg.KeyLabel))
+	}
 	fmt.Fprintf(&b, ",tpad=stop_mode=clone:stop_duration=%.3f,trim=end=%.3f,setpts=PTS-STARTPTS,setsar=1", sg.DurS+0.1, sg.DurS)
 	return b.String()
+}
+
+// outlineBox draws a discreet white target outline in source-space
+// fractions (pre-zoom). Single calm emphasis, never continuous pulse.
+func outlineBox(sg timeline.AVSegment, t int) string {
+	nb := sg.NormBBox
+	return fmt.Sprintf("drawbox=x='%.4f*iw':y='%.4f*ih':w='%.4f*iw':h='%.4f*ih':color=white@0.9:t=%d",
+		nb.X, nb.Y, nb.Width, nb.Height, t)
+}
+
+// keyboardPill renders the keyboard shortcut overlay ("ENTER"): dark
+// pill + bold label, bottom-center above subtitles. Solid border keeps
+// the pill defined on both dark and light backdrops. NOTE: drawbox x/y
+// expressions accept iw/ih (not bare w/h); drawtext accepts w/h.
+func keyboardPill(label string) string {
+	if label == "" {
+		label = "KEY"
+	}
+	esc := strings.NewReplacer(`\`, `\\`, `:`, `\:`, `'`, `\'`, `%`, `\%`).Replace(label)
+	return "drawbox=x='(iw-240)/2':y='ih-150':w=240:h=64:color=black@0.78:t=fill," +
+		"drawbox=x='(iw-240)/2':y='ih-150':w=240:h=64:color=white@0.9:t=3," +
+		"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='" + esc + "':fontsize=30:fontcolor=white:x='(w-text_w)/2':y='h-150+(64-text_h)/2'"
 }
 
 // ZoomChain returns the FFmpeg video filter chain for zooming into a segment.
@@ -191,7 +230,6 @@ func zoomChain(sg timeline.AVSegment, w, h int) string {
 		z = fmt.Sprintf("(1+(%.4f-1)*if(lt(t,%.3f),pow(t/%.3f\\,2)*(3-2*t/%.3f)\\,if(gt(t\\,%.3f)\\,pow((%.3f-t)/%.3f\\,2)*(3-2*(%.3f-t)/%.3f)\\,1)))",
 			sg.Zoom, T, T, T, D-T, D, T, D, T)
 	}
-
 	cw := fmt.Sprintf("iw/%s", z)
 	ch := fmt.Sprintf("ih/%s", z)
 	x := fmt.Sprintf("max(0\\,min(iw-(%s)\\,%.1f-(%s)/2))", cw, cx, cw)

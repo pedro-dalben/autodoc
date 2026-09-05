@@ -110,6 +110,17 @@ func DirectAttention(beats []BeatPlan, cfg visual.CinematicConfig) *AttentionPla
 		default:
 			dec.Strategy, dec.Reason = AttStay, "default-hold"
 		}
+		// Explicit spotlight direction overrides the automatic choice:
+		// off kills the dim (strategy untouched), an intensity forces it.
+		if b.SpotlightMode == "off" {
+			dec.Spotlight = false
+			dec.Reason += "+spotlight-off"
+		} else if b.SpotlightMode == "subtle" || b.SpotlightMode == "medium" || b.SpotlightMode == "strong" {
+			if cfg.AttentionOn() {
+				dec.Spotlight = true
+			}
+			dec.Reason += "+spotlight-" + b.SpotlightMode
+		}
 		p.Decisions = append(p.Decisions, dec)
 	}
 	applyAttentionBudget(p, beats)
@@ -137,7 +148,7 @@ func applyAttentionBudget(p *AttentionPlan, beats []BeatPlan) {
 		if d.Strategy != AttSpotlight && d.Strategy != AttFollow {
 			continue
 		}
-		if d.BeatIndex >= 0 && d.BeatIndex < len(beats) && beats[d.BeatIndex].AttentionOverride != "" {
+		if d.BeatIndex >= 0 && d.BeatIndex < len(beats) && (beats[d.BeatIndex].AttentionOverride != "" || beats[d.BeatIndex].SpotlightMode != "" || beats[d.BeatIndex].CameraOverride == "stay") {
 			continue
 		}
 		used[d.SceneID]++

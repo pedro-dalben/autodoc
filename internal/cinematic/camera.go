@@ -118,8 +118,10 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 			attDec = d
 		}
 		camOv := ""
+		zoomMode := ""
 		if bi >= 0 && bi < len(beats) {
 			camOv = beats[bi].CameraOverride
+			zoomMode = beats[bi].ZoomMode
 		}
 		switch sg.Kind {
 		case "action":
@@ -127,7 +129,22 @@ func DirectCamera(ft *timeline.FinalTimeline, att *AttentionPlan, beats []BeatPl
 				dec.Move, dec.Zoom, dec.Reason = CamStay, 1, "override-"+camOv
 				break
 			}
-			if zoom <= 1.01 || !cfg.DirectorOn() {
+			// Explicit direction: zoom=off pins full viewport within
+			// safe limits; an explicit intensity upgrades a reconciled
+			// 1.0 to the requested scale when the target bbox is safe.
+			if zoomMode == "off" {
+				dec.Move, dec.Zoom, dec.Reason = CamStay, 1, "direction-zoom-off"
+				break
+			}
+			if zoom <= 1.01 {
+				if scale := directedZoomScale(zoomMode, cfg.Camera.MaxZoom); scale > 1.01 && sg.NormBBox != nil && bboxSafe(sg.NormBBox) {
+					zoom = scale
+				} else {
+					dec.Move, dec.Zoom, dec.Reason = CamStay, 1, "no-focus-needed"
+					break
+				}
+			}
+			if !cfg.DirectorOn() {
 				dec.Move, dec.Zoom, dec.Reason = CamStay, 1, "no-focus-needed"
 				break
 			}
@@ -272,6 +289,26 @@ func bboxSafe(nb *visual.BBox) bool {
 	}
 	const m = 0.02
 	return nb.X >= -m && nb.Y >= -m && nb.X+nb.Width <= 1+m && nb.Y+nb.Height <= 1+m
+}
+
+// directedZoomScale maps an explicit zoom mode to a render scale clamped
+// to the cinematic MaxZoom safety ceiling (never above 1.5). Returns 0
+// when the director decides ("" or auto).
+func directedZoomScale(mode string, maxZoom float64) float64 {
+	z := visual.ZoomScale(mode)
+	if z <= 1.01 {
+		return 0
+	}
+	if maxZoom <= 0 {
+		maxZoom = 1.25
+	}
+	if maxZoom > 1.5 {
+		maxZoom = 1.5
+	}
+	if z > maxZoom {
+		z = maxZoom
+	}
+	return z
 }
 
 // ApplyCamera clamps reconciled zooms to the directed plan (continuity,

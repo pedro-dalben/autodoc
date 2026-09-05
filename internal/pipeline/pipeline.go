@@ -372,10 +372,12 @@ func (r *Run) RecordScene(ctx context.Context, sceneID string, backendName strin
 	}
 	vis := r.SB.VisualsOrDefault()
 	cine := r.SB.CinematicOrDefault()
+	// Record-time direction (cursor/click/typing/spotlight capture intent).
+	// Render-time fields never invalidate the raw capture.
+	cinematic.ApplyDirectionToCapture(r.SB, &vis, &cine)
 	vis.Cinematic = cine
 	opts := capture.StartOptions{
 		SceneID: sceneID, ViewportW: vw, ViewportH: vh, Headless: headless,
-		BaseURL:  firstNonEmpty(r.SB.Config.BaseURL, cfg.TTS.BaseURL),
 		VideoDir: rawDir, Redact: r.SB.Redact, Visuals: vis,
 	}
 	if r.SB.Config.BaseURL != "" {

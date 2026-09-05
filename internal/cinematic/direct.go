@@ -22,19 +22,30 @@ type CinematicPlan struct {
 	Pauses         *PausePlan     `json:"pauses"`
 	CameraAdjusted int            `json:"camera_adjusted_segments"`
 	HoldsAddedMs   int            `json:"holds_added_ms"`
+	// Resolved is the per-beat direction contract (precedence:
+	// action > scene > tutorial > preset > director). Absent direction
+	// resolves to all-auto owned by the director.
+	Resolved []ResolvedBeat `json:"resolved_direction,omitempty"`
+	// Effects is the scheduled effect timeline (render + record layer).
+	Effects *EffectTimeline `json:"effects,omitempty"`
+	// Compliance verifies every explicit user directive.
+	Compliance *ComplianceReport `json:"directive_compliance,omitempty"`
 }
 
 // Bundle carries every V2 artifact for one storyboard hash.
 type Bundle struct {
-	Scenes    *ScenePlanDoc
-	Attention *AttentionPlan
-	Camera    *CameraPlan
-	Edit      *EditPlan
-	Static    *StaticReport
-	StaticNar []StaticNarrationWindow
-	Callouts  []Callout
-	Plan      *CinematicPlan
-	Report    *CinematicReport
+	Scenes     *ScenePlanDoc
+	Attention  *AttentionPlan
+	Camera     *CameraPlan
+	Edit       *EditPlan
+	Static     *StaticReport
+	StaticNar  []StaticNarrationWindow
+	Callouts   []Callout
+	Plan       *CinematicPlan
+	Report     *CinematicReport
+	Resolved   []ResolvedBeat
+	Effects    *EffectTimeline
+	Compliance *ComplianceReport
 }
 
 // Direct runs the full PLAN -> DIRECT -> EDIT -> VALIDATE chain over an
@@ -43,18 +54,25 @@ type Bundle struct {
 // returns every intermediate artifact for workspace debugging.
 func Direct(r *recipe.Recipe, sb *storyboard.Storyboard, ft *timeline.FinalTimeline, events map[string][]timeline.ActualEvent, vis visual.Config, cine visual.CinematicConfig) *Bundle {
 	scenes := PlanScenes(r, sb)
+	// Explicit direction resolves first (action > scene > tutorial >
+	// preset > director) and threads into the beats before the
+	// automatic directors run. Absent direction = all-auto.
+	resolved := Resolve(sb, scenes.Beats)
+	applyResolvedToBeats(scenes.Beats, resolved)
 	att := DirectAttention(scenes.Beats, cine)
 	static := AnalyzeStatic(ft, events)
 	staticNar := DetectStaticNarration(ft, scenes.Beats, static, cine)
 	callouts := PlanCallouts(scenes.Beats, cine)
+	callouts = filterCalloutsByDirection(callouts, scenes.Beats, resolved)
 	pauses := PlanPauses(r, vis.Pacing.SpeechActionGapMs, vis.Pacing.ActionSpeechGapMs)
 
 	// Sync-safe direction applied to the final timeline: camera first,
 	// then result holds (which reflow StartS deterministically).
 	cam := DirectCamera(ft, att, scenes.Beats, cine, vis)
+	enforceCameraLock(cam, scenes.Beats, resolved)
 	adjusted := ApplyCamera(ft, cam)
 	edit := BuildEditPlan(ft, scenes.Beats, cine)
-	added := EnsureResultHolds(ft, scenes.Beats, cine)
+	added := EnsureResultHoldsWithDirection(ft, scenes.Beats, cine, resolved)
 	// Rebuild the edit plan after hold extension so the EDL matches the
 	// rendered timeline exactly.
 	if added > 0 {
@@ -62,14 +80,18 @@ func Direct(r *recipe.Recipe, sb *storyboard.Storyboard, ft *timeline.FinalTimel
 		edit.HoldsAddedMs = added
 	}
 
+	fx := PlanEffects(resolved, scenes.Beats, ft)
 	collisions := EvaluateCollisions(ft, scenes.Beats, callouts)
+	collisions = append(collisions, fx.Collisions...)
 	report := RunQA(ft, scenes, att, cam, edit, staticNar, collisions, cine)
+	compliance := ComplianceFor(resolved, cam, att, callouts, fx)
 	plan := &CinematicPlan{
 		StoryboardHash: ft.StoryboardHash, Attention: att, Camera: cam,
 		Callouts: callouts, Pauses: pauses,
 		CameraAdjusted: adjusted, HoldsAddedMs: added,
+		Resolved: resolved, Effects: fx, Compliance: compliance,
 	}
-	return &Bundle{Scenes: scenes, Attention: att, Camera: cam, Edit: edit, Static: static, StaticNar: staticNar, Callouts: callouts, Plan: plan, Report: report}
+	return &Bundle{Scenes: scenes, Attention: att, Camera: cam, Edit: edit, Static: static, StaticNar: staticNar, Callouts: callouts, Plan: plan, Report: report, Resolved: resolved, Effects: fx, Compliance: compliance}
 }
 
 // EvaluateCollisions checks planned callouts against directed targets for

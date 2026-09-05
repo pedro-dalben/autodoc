@@ -14,6 +14,8 @@ type CursorConfig struct {
 	ParkY    int  `yaml:"park_y" json:"park_y"`
 	ParkMs   int  `yaml:"park_ms" json:"park_ms"`
 	Disabled bool `yaml:"disabled" json:"disabled"`
+	// Halo draws a discreet ring around the cursor (training/onboarding).
+	Halo bool `yaml:"halo" json:"halo"`
 }
 
 type ClickConfig struct {
@@ -525,14 +527,12 @@ const OverlayJS = `(function(){
     el.id=id;
     el.style.cssText='position:fixed;pointer-events:none;z-index:2147483646;'+css;
     document.documentElement.appendChild(el);
-    return el;
-  }
   var cursor=mk('div','__autodoc_cursor','left:0;top:0;width:22px;height:22px;opacity:0;transition:opacity .15s;');
   cursor.innerHTML='<svg width="22" height="22" viewBox="0 0 22 22"><path d="M5 2 L5 17 L9.5 13 L12 19 L14.5 17.8 L12 12 L17 12 Z" fill="#111" stroke="#fff" stroke-width="1.6"/></svg>';
-  var hl=mk('div','__autodoc_hl','left:0;top:0;opacity:0;border:2.5px solid #4f8cff;border-radius:8px;box-shadow:0 0 0 4px rgba(79,140,255,.22),0 0 18px rgba(79,140,255,.35);transition:opacity .15s;');
-  var rp=mk('div','__autodoc_ripple','left:0;top:0;width:14px;height:14px;margin:-7px 0 0 -7px;opacity:0;border-radius:50%;border:3px solid #4f8cff;');
+  var halo=mk('div','__autodoc_halo','left:0;top:0;width:36px;height:36px;margin:-18px 0 0 -18px;opacity:0;border-radius:50%;border:2px solid rgba(79,140,255,.55);box-shadow:0 0 12px rgba(79,140,255,.25);');
+  var haloOn=false;
   var st={cx:0,cy:0,raf:0};
-  function placeCursor(x,y){ st.cx=x; st.cy=y; cursor.style.transform='translate('+x+'px,'+y+'px)'; }
+  function placeCursor(x,y){ st.cx=x; st.cy=y; cursor.style.transform='translate('+x+'px,'+y+'px)'; if(haloOn){ halo.style.transform='translate('+(x+5)+'px,'+(y+4)+'px)'; } }
   function modalOpen(){ try{ var d=document.querySelector('dialog[open]'); if(d) return d; var m=document.querySelector('.modal.open,.modal.show,[role="dialog"]'); if(m){ var r=m.getBoundingClientRect(); if(r.width>0&&r.height>0) return m; } }catch(e){} return null; }
   function inside(el,x,y,w,h){ try{ if(!el) return false; var r=el.getBoundingClientRect(); return x>=r.left-8&&y>=r.top-8&&(x+w)<=r.right+8&&(y+h)<=r.bottom+8; }catch(e){ return false; } }
   var spots=[];
@@ -540,8 +540,8 @@ const OverlayJS = `(function(){
   for(var i=0;i<4;i++) spotEl();
   var callout=mk('div','__autodoc_callout','left:0;top:0;opacity:0;max-width:280px;padding:6px 10px;border-radius:8px;background:rgba(17,20,32,.92);color:#fff;font:600 12px/1.4 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;');
   window.__autodocCues={
+    halo:function(on){ haloOn=!!on; halo.style.opacity=on?'1':'0'; if(on){ halo.style.transform='translate('+(st.cx+5)+'px,'+(st.cy+4)+'px)'; } },
     cursorShow:function(x,y){ cursor.style.opacity='1'; placeCursor(x,y); },
-    cursorHide:function(){ cursor.style.opacity='0'; },
     cursorMove:function(x0,y0,x1,y1,dur){
       cursor.style.opacity='1';
       cancelAnimationFrame(st.raf);
@@ -612,6 +612,14 @@ func CursorMoveJS(from, to Point, ms int) string {
 
 func CursorShowJS(p Point) string {
 	return `window.__autodocCues&&window.__autodocCues.cursorShow(` + f2(p.X) + `,` + f2(p.Y) + `)`
+}
+
+// HaloJS toggles the discreet cursor halo (training/onboarding emphasis).
+func HaloJS(on bool) string {
+	if on {
+		return `window.__autodocCues&&window.__autodocCues.halo(true)`
+	}
+	return `window.__autodocCues&&window.__autodocCues.halo(false)`
 }
 
 func HighlightJS(b BBox, ms int) string {

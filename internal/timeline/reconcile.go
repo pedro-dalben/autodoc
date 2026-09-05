@@ -51,11 +51,16 @@ type AVSegment struct {
 	NormBBox         *visual.BBox `json:"norm_bbox,omitempty"`
 	CameraTransition string       `json:"camera_transition,omitempty"`
 	Keyboard         bool         `json:"keyboard,omitempty"`
-	Compressed       bool         `json:"compressed,omitempty"`
-	Estimated        bool         `json:"estimated,omitempty"`
-	Compressible     bool         `json:"compressible"`
+	// KeyLabel carries the keyboard overlay label ("ENTER", "CTRL+K").
+	KeyLabel string `json:"key_label,omitempty"`
+	// Outline draws a discreet target outline (~500ms emphasis).
+	Outline bool `json:"outline,omitempty"`
+	// ResultFlash marks result segments for soft emphasis.
+	ResultFlash  bool `json:"result_flash,omitempty"`
+	Compressed   bool `json:"compressed,omitempty"`
+	Estimated    bool `json:"estimated,omitempty"`
+	Compressible bool `json:"compressible"`
 }
-
 type SyncItem struct {
 	Scope       string  `json:"scope"`
 	Kind        string  `json:"kind"`

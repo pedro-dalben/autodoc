@@ -81,6 +81,8 @@ type BeatPlan struct {
 	Anchor      VisualAnchor `json:"anchor"`
 	ActionType  string       `json:"action_type,omitempty"`
 	ActionLabel string       `json:"action_label,omitempty"`
+	// ActionKey carries press keys ("Enter", "Control+k") for overlays.
+	ActionKey string `json:"action_key,omitempty"`
 	// ActionSelector is the Playwright selector form ("[data-testid=x]");
 	// reconciled segment labels carry it, enabling exact correlation.
 	ActionSelector string `json:"action_selector,omitempty"`
@@ -93,6 +95,11 @@ type BeatPlan struct {
 	CameraOverride    string `json:"camera_override,omitempty"`
 	AttentionOverride string `json:"attention_override,omitempty"`
 	Callout           string `json:"callout,omitempty"`
+	// ZoomMode/SpotlightMode carry resolved explicit direction into the
+	// directors (""/auto = director decides). Set by applyResolvedToBeats,
+	// never hand-authored.
+	ZoomMode      string `json:"zoom_mode,omitempty"`
+	SpotlightMode string `json:"spotlight_mode,omitempty"`
 }
 
 // ScenePlanDoc is the serializable scene_plan.json artifact.
@@ -361,6 +368,7 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 				narration = next.Text
 			}
 			actionType, actionLabel, actionSelector := "", "", ""
+			actionKey := ""
 			callout := ""
 			camOv, attOv := sceneCam[sc.ID], sceneAtt[sc.ID]
 			expResult := ""
@@ -371,7 +379,16 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 				if st.Action.Target != nil {
 					actionLabel += " " + st.Action.Target.Describe()
 				}
+				if st.Action.Key != "" {
+					actionKey = st.Action.Key
+					actionLabel += " " + st.Action.Key
+				}
 				actionSelector = st.Action.Type + " " + selectorOf(st.Action)
+				if st.Action.Type == "press" && st.Action.Key != "" && st.Action.Target == nil {
+					// Capture records target-less keypresses as "press <key>"
+					// (never "press body"): correlate on the evidence form.
+					actionSelector = "press " + st.Action.Key
+				}
 				callout = st.Action.Callout
 				if st.Action.Camera != "" {
 					camOv = st.Action.Camera
@@ -393,6 +410,7 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 				Type: bt, Intent: IntentFor(bt, narration, actionLabel),
 				Narration: narration, SpeechID: speechID, Anchor: anchor,
 				ActionType: actionType, ActionLabel: actionLabel,
+				ActionKey:         actionKey,
 				ActionSelector:    actionSelector,
 				ExpectedResult:    expResult,
 				NeedsAnticipation: st.Kind == recipe.StepAction && (actionType == "click" || actionType == "fill" || actionType == "type" || actionType == "select" || actionType == "press"),

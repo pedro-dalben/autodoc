@@ -197,6 +197,9 @@ func (b *PlaywrightBackend) ensureOverlay() {
 		return
 	}
 	b.eval(visual.EnsureOverlayJS())
+	if b.vis.Cursor.Halo && b.vis.CursorOn() {
+		b.eval(visual.HaloJS(true))
+	}
 }
 
 func (b *PlaywrightBackend) parkPos() visual.Point {
