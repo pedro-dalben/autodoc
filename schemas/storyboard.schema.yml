@@ -66,6 +66,8 @@ properties:
       camera: {type: object}
       pacing: {type: object}
       sync: {type: object}
+  direction:
+    $ref: "#/definitions/direction"
   cinematic:
     type: object
     description: "AI Director overrides; omit for safe V2 defaults (director on, callouts/sound off)."
@@ -134,6 +136,7 @@ properties:
         id: {type: string}
         camera: {type: string}
         attention: {type: string}
+        direction: {$ref: "#/definitions/direction"}
         id: {type: string}
         title: {type: string}
         url: {type: string}
@@ -167,8 +170,31 @@ properties:
                         camera: {type: string}
                         attention: {type: string}
                         callout: {type: string}
+                        direction: {$ref: "#/definitions/direction"}
                         no_anticipation: {type: boolean}
                         result_hold_ms: {type: integer}
                         result_target: {type: object}
                     wait: {type: object}
                     hold: {type: object}
+
+definitions:
+  direction:
+    type: object
+    description: "Explicit cinematic direction (semantic intent; unset=auto). Precedence: action>scene>tutorial>preset>director."
+    properties:
+      preset: {type: string, enum: [auto, minimal, balanced, dynamic, training]}
+      camera: {type: string, enum: [auto, static, subtle, dynamic, follow, focus, wide]}
+      zoom: {type: string, enum: [auto, off, subtle, medium, strong, extreme]}
+      cursor: {type: string, enum: [auto, show, hide]}
+      cursor_halo: {type: string, enum: [auto, off, on]}
+      click: {type: string, enum: [auto, off, subtle, strong]}
+      click_effect: {type: string, enum: [auto, none, ripple, ring, pulse, highlight]}
+      typing: {type: string, enum: [auto, instant, natural, slow, fast]}
+      keyboard: {type: string, enum: [auto, off, shortcuts, all]}
+      spotlight: {type: string, enum: [auto, off, subtle, medium, strong]}
+      focus: {type: string, enum: [auto, off, outline, pulse]}
+      callout: {type: string, enum: [auto, off, on]}
+      result: {type: string, enum: [auto, off, emphasize]}
+      hold: {type: string, enum: [auto, short, normal, long]}
+      transition: {type: string, enum: [auto, cut, smooth, none]}
+      camera_lock: {type: string, enum: [auto, off, on]}

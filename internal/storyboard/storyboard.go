@@ -18,6 +18,9 @@ type Storyboard struct {
 	// safe V2 defaults (director on, callouts/sound off). V1 storyboards
 	// without this block keep validating and rendering unchanged.
 	Cinematic *visual.CinematicConfig `yaml:"cinematic,omitempty" json:"cinematic,omitempty"`
+	// Direction carries optional explicit tutorial-level cinematic direction
+	// (semantic intent only; empty/absent = automatic director).
+	Direction *visual.DirectionConfig `yaml:"direction,omitempty" json:"direction,omitempty"`
 	Scenes    []Scene                 `yaml:"scenes" json:"scenes"`
 	Redact    Redact                  `yaml:"redact" json:"redact"`
 }
@@ -67,6 +70,8 @@ type Scene struct {
 	// Optional V2 overrides for special situations (default: semantic).
 	Camera    string `yaml:"camera,omitempty" json:"camera,omitempty"`
 	Attention string `yaml:"attention,omitempty" json:"attention,omitempty"`
+	// Direction carries optional scene-level overrides (empty = inherit).
+	Direction *visual.DirectionConfig `yaml:"direction,omitempty" json:"direction,omitempty"`
 	// Targets and Defaults are optional compact-authoring helpers. They expand
 	// in memory before validation/compilation, so V1/V2 recipes stay unchanged.
 	Targets  map[string]Target `yaml:"targets,omitempty" json:"targets,omitempty"`
@@ -137,6 +142,8 @@ type Action struct {
 	Callout string `yaml:"callout,omitempty" json:"callout,omitempty"`
 	// NoAnticipation disables pre-action anticipation for this action.
 	NoAnticipation *bool `yaml:"no_anticipation,omitempty" json:"no_anticipation,omitempty"`
+	// Direction carries optional action-level overrides (empty = inherit).
+	Direction *visual.DirectionConfig `yaml:"direction,omitempty" json:"direction,omitempty"`
 }
 
 type Target struct {
@@ -207,12 +214,12 @@ func (s *Storyboard) Validate() []error {
 	if s.Version != 1 && s.Version != 2 {
 		add("version must be 1 or 2, got %d", s.Version)
 	}
-	if s.Visuals != nil {
-		s.Visuals.ApplyDefaults()
-	}
 	if s.Cinematic != nil {
 		s.Cinematic.ApplyDefaults()
 		validateCinematic(s.Cinematic, &errs)
+	}
+	for _, e := range s.Direction.Validate() {
+		errs = append(errs, fmt.Errorf("direction: %v", e))
 	}
 	if strings.TrimSpace(s.Meta.Title) == "" {
 		add("meta.title is required")
@@ -276,6 +283,9 @@ func (s *Storyboard) Validate() []error {
 		if sc.Attention != "" && !validAttentionOverride[sc.Attention] {
 			add("scene %q: unknown attention override %q", sc.ID, sc.Attention)
 		}
+		for _, e := range sc.Direction.Validate() {
+			errs = append(errs, fmt.Errorf("scene %q direction: %v", sc.ID, e))
+		}
 		for j := range sc.Beats {
 			b := &sc.Beats[j]
 			if strings.TrimSpace(b.ID) == "" {
@@ -329,6 +339,9 @@ func (s *Storyboard) Validate() []error {
 				}
 				if ev.Action != nil {
 					validateAction(ev.Action, where, &errs)
+					for _, e := range ev.Action.Direction.Validate() {
+						errs = append(errs, fmt.Errorf("%s direction: %v", where, e))
+					}
 				}
 				if ev.Wait != nil {
 					validateWait(ev.Wait, where, &errs)
