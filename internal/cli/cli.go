@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pedro-dalben/autodoc/internal/agent"
 	"github.com/pedro-dalben/autodoc/internal/cinematic"
@@ -432,7 +433,37 @@ func newTTSCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
+	cmd.AddCommand(newTTSCheckCmd())
 	return cmd
+}
+
+func newTTSCheckCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "check",
+		Short: "Probe the configured TTS endpoint with a one-sentence synthesis",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, _ := os.Getwd()
+			lc, err := config.FindConfig(cwd)
+			if err != nil || lc.Source == "default" {
+				return fmt.Errorf("autodoc.toml not found (run autodoc init first)")
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "TTS: %s %s model=%s ... ", lc.Config.TTS.Provider, lc.Config.TTS.BaseURL, lc.Config.TTS.Model)
+			prov, err := ttsProviderFromConfig(lc.Config)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			wav, err := prov.Synthesize(ctx, tts.Request{Text: "AutoDoc audio check.", Voice: lc.Config.TTS.Voice, Model: lc.Config.TTS.Model, Language: lc.Config.TTS.Language, Speed: lc.Config.TTS.Speed, Format: "wav"})
+			if err != nil {
+				return fmt.Errorf("tts check failed: %w (see docs/local-tts.md)", err)
+			}
+			dur, _ := tts.WavDurationSeconds(wav)
+			fmt.Fprintf(out, "ok (%.2fs wav)\n", dur)
+			return nil
+		},
+	}
 }
 
 func newRecordCmd() *cobra.Command {

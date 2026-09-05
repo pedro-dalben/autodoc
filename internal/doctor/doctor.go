@@ -3,11 +3,13 @@ package doctor
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/mxschmitt/playwright-go"
 	"github.com/pedro-dalben/autodoc/internal/config"
@@ -116,20 +118,21 @@ func AutodocSection() Section {
 
 func MediaSection() Section {
 	s := Section{Name: "Media"}
+	const ffmpegFix = "Fix: install FFmpeg 6+ (Debian/Ubuntu: sudo apt install ffmpeg; macOS: brew install ffmpeg; Windows: winget install Gyan.FFmpeg) or set AUTODOC_FFMPEG/AUTODOC_FFPROBE, then re-run autodoc doctor"
 	if v, err := media.CheckFFmpeg(); err != nil {
-		s.Checks = append(s.Checks, fail("ffmpeg", err.Error()))
+		s.Checks = append(s.Checks, fail("ffmpeg", err.Error()+". "+ffmpegFix))
 	} else {
 		s.Checks = append(s.Checks, ok("ffmpeg", v))
 	}
 	if out, err := exec.Command(media.FFprobePath(), "-version").Output(); err != nil {
-		s.Checks = append(s.Checks, fail("ffprobe", err.Error()))
+		s.Checks = append(s.Checks, fail("ffprobe", "ffprobe not found ("+media.FFprobePath()+"). "+ffmpegFix))
 	} else {
 		s.Checks = append(s.Checks, ok("ffprobe", strings.SplitN(string(out), "\n", 2)[0]))
 	}
 	for _, enc := range []string{"libx264", "aac"} {
 		out, err := exec.Command(media.FFmpegPath(), "-hide_banner", "-encoders").Output()
 		if err != nil || !strings.Contains(string(out), enc) {
-			s.Checks = append(s.Checks, fail("codec "+enc, "encoder not available"))
+			s.Checks = append(s.Checks, fail("codec "+enc, "encoder not available. Fix: reinstall FFmpeg with "+enc+" support (see docs/install.md), then re-run autodoc doctor"))
 		} else {
 			s.Checks = append(s.Checks, ok("codec "+enc, "available"))
 		}
@@ -272,7 +275,7 @@ func TTSSection() Section {
 			}
 		}
 		if strings.Contains(line, "sk-live") || strings.Contains(line, "sk-test") || strings.Contains(line, "ghp_") {
-			s.Checks = append(s.Checks, fail("secrets", "possible secret literal in autodoc.toml (use env vars)"))
+			s.Checks = append(s.Checks, fail("secrets", "possible secret literal in autodoc.toml. Fix: move the value to an env var and reference it via secret_ref/api_key_env (see docs/security.md)"))
 		}
 	}
 	s.Checks = append(s.Checks, ok("provider", redactValue(provider)+" ("+lc.Source+")"))
@@ -290,11 +293,29 @@ func TTSSection() Section {
 		}
 	}
 	if baseURL == "" {
-		s.Checks = append(s.Checks, fail("endpoint", "tts.base_url missing"))
+		s.Checks = append(s.Checks, fail("endpoint", "tts.base_url missing. Fix: set base_url in autodoc.toml (see docs/tts.md) or use provider = \"disabled\""))
 	} else {
 		s.Checks = append(s.Checks, ok("endpoint", baseURL))
+		if probeEndpoint(baseURL) {
+			s.Checks = append(s.Checks, ok("reachable", "TTS endpoint answered"))
+		} else {
+			s.Checks = append(s.Checks, fail("reachable", "TTS endpoint unreachable at "+baseURL+". Fix: start the server (see docs/local-tts.md), check base_url, or use provider = \"disabled\" for silent runs"))
+		}
 	}
 	return s
+}
+
+// probeEndpoint reports whether the TTS base URL answers any HTTP response.
+// Any status counts: OpenAI-compatible servers usually 404 a bare GET, which
+// still proves the server is up. Short timeout keeps doctor fast offline.
+func probeEndpoint(baseURL string) bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return true
 }
 
 func HarnessSection() Section {
@@ -306,9 +327,9 @@ func HarnessSection() Section {
 		case pr.Configured:
 			s.Checks = append(s.Checks, ok(h.Name, "skill+mcp configured"))
 		case pr.Partial:
-			s.Checks = append(s.Checks, warn(h.Name, "partially configured"))
+			s.Checks = append(s.Checks, warn(h.Name, "partially configured (run autodoc init to finish setup)"))
 		case pr.Found:
-			s.Checks = append(s.Checks, warn(h.Name, "found, autodoc not configured"))
+			s.Checks = append(s.Checks, warn(h.Name, "found, autodoc not configured (run autodoc init)"))
 		default:
 			if h.Name == "cursor" {
 				s.Checks = append(s.Checks, warn(h.Name, "not found (best-effort)"))
