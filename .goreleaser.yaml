@@ -13,10 +13,13 @@ builds:
       - goos: windows
         goarch: arm64
     ldflags:
-      - -s -w -X github.com/pedro-dalben/autodoc/internal/version.Commit={{ .Commit }} -X github.com/pedro-dalben/autodoc/internal/version.Date={{ .Date }}
+      - -s -w -X github.com/pedro-dalben/autodoc/internal/version.Version={{ .Version }} -X github.com/pedro-dalben/autodoc/internal/version.Commit={{ .Commit }} -X github.com/pedro-dalben/autodoc/internal/version.Date={{ .Date }}
 archives:
   - id: default
-    formats: [tar.gz, zip]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: checksums.txt
@@ -27,5 +30,4 @@ changelog:
   sort: asc
   use: github
 release:
-  draft: true
   prerelease: auto
