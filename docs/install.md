@@ -1,68 +1,106 @@
 # Install
 
+## Binary (recommended)
+
+No Go toolchain needed.
+
+Linux or macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.ps1 | iex
+```
+
+The installer detects OS and architecture, downloads the matching archive
+from GitHub Releases, verifies its SHA-256 checksum, and installs the binary
+to `~/.local/bin` (or `%LOCALAPPDATA%\autodoc\bin` on Windows). A checksum
+mismatch aborts the install. If the directory is not on `PATH`, the installer
+prints the exact line to add.
+
+Reproducible install of a specific version:
+
+```bash
+curl -fsSL .../install.sh | sh -s -- --version v0.1.0
+```
+
+```powershell
+.\install.ps1 -Version v0.1.0
+```
+
+Supported platforms (these are the archives GoReleaser builds):
+
+- Linux amd64 and arm64
+- macOS amd64 and arm64
+- Windows amd64
+
+Releases are cut from version tags (`vX.Y.Z`) by GitHub Actions; each release
+publishes archives plus `checksums.txt`. See [release.md](release.md).
+
 ## Requirements
 
-- Go 1.24+ (to build) or a released `autodoc` binary
-- FFmpeg 6+ with `libx264` + `aac` encoders (`ffmpeg`, `ffprobe` on PATH)
-- Playwright browser assets (installed via `autodoc browser install`)
-- Optional: OpenAI-compatible TTS endpoint (or local Kokoro-compatible server),
-  or `provider = "disabled"` for silent dry runs
+- FFmpeg 6+ with `libx264` and `aac` (`ffmpeg` and `ffprobe` on `PATH`).
+  Install it before running `autodoc render`:
 
-## From source
+  ```bash
+  sudo apt install ffmpeg          # Debian/Ubuntu
+  brew install ffmpeg              # macOS
+  winget install Gyan.FFmpeg       # Windows
+  ```
+
+  To use custom paths without touching `PATH`:
+
+  ```bash
+  export AUTODOC_FFMPEG=/opt/ffmpeg/bin/ffmpeg
+  export AUTODOC_FFPROBE=/opt/ffmpeg/bin/ffprobe
+  ```
+
+- Playwright browser assets. The Go binary does not include them:
+
+  ```bash
+  autodoc browser install
+  ```
+
+- A TTS endpoint (any OpenAI-compatible `/audio/speech` server), or
+  `provider = "disabled"` for silent runs. See [tts.md](tts.md) and
+  [local-tts.md](local-tts.md).
+
+## From source (developers)
 
 ```bash
 go build -o autodoc ./cmd/autodoc
-sudo install -m755 autodoc /usr/local/bin/autodoc
 ```
 
 ## Setup
 
 ```bash
-autodoc init          # project: writes ./autodoc.toml + example storyboard.yml
-autodoc init --global # machine: writes ~/.config/autodoc/autodoc.toml (no storyboard)
+autodoc init              # project: ./autodoc.toml + example storyboard.yml
+autodoc init --global     # machine: ~/.config/autodoc/autodoc.toml, no storyboard
+autodoc doctor            # full diagnostics
 ```
 
-`init` probes coding agents (Codex, Claude Code, Antigravity, Gemini CLI,
-OpenCode; Cursor best-effort), installs the canonical skill + MCP entries it owns,
-checks TTS/FFmpeg/browser, and writes config + example `storyboard.yml`
-(project mode only). Re-running `init` is idempotent (zero diff).
+`init` probes installed coding agents, installs the skill and MCP entries it
+owns, checks TTS/FFmpeg/browser, and writes config plus an example
+`storyboard.yml` (project mode only). Re-running it changes nothing when
+everything is already in place.
 
-## Config resolution
+Every command resolves config as project, then global, then built-in
+defaults. See [config.md](config.md).
 
-Every command resolves config as **project → global → defaults**:
-
-1. `./autodoc.toml` walking upward from the cwd (project root);
-2. `~/.config/autodoc/autodoc.toml` (`$AUTODOC_CONFIG_HOME`, else
-   `$XDG_CONFIG_HOME/autodoc/`);
-3. built-in defaults (used only when neither file exists).
-
-A project file always wins; delete it (or run outside the project) to fall
-back to global. `doctor` reports which source is active (`project`/`global`).
-Only settings that differ per machine belong in global (TTS endpoint/voice,
-browser profile); storyboards always live in the project. `init --global`
-never writes `storyboard.yml`.
-
-## Playwright browsers
-
-`go install` alone does NOT make Playwright functional — browser assets are separate:
+## Verify
 
 ```bash
-autodoc browser check
-autodoc browser install
+autodoc version
 autodoc doctor
+autodoc browser check
 ```
 
-## TTS
-
-Default is an OpenAI-compatible endpoint (works with local Kokoro servers and
-with OpenAI itself). For offline/silent runs:
-
-```toml
-[tts]
-provider = "disabled"
-```
-
-See [tts.md](tts.md) and [local-tts.md](local-tts.md).
+`doctor` answers "is my installation ready". Each failing check prints the
+command or doc page that fixes it.
 
 ## Uninstall
 
@@ -70,6 +108,5 @@ See [tts.md](tts.md) and [local-tts.md](local-tts.md).
 autodoc uninstall
 ```
 
-Removes only AutoDoc-owned entries (manifest-tracked, marker-delimited).
-Your own edits are preserved. `.bak` files are recovery-only; automatic restore
-requires explicit `--restore-backup`.
+This removes only AutoDoc-owned entries (manifest-tracked, marker-delimited).
+Your own edits survive. Delete the binary separately (`rm ~/.local/bin/autodoc`).

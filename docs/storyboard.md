@@ -112,7 +112,7 @@ defaults.
 ## Cinematic V2 — AI Director (default, safe)
 
 On top of V1, the AI Director plans semantic beats (see
-`docs/cinematic-v2.md`): anticipation envelopes (reveal → approach →
+`docs/cinematic.md`): anticipation envelopes (reveal → approach →
 settle) precede important actions, a subtle spotlight can de-emphasize
 non-relevant regions (never covering modals, always `pointer-events:
 none`), the camera keeps continuity across beats and restores full
