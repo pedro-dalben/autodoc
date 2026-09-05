@@ -84,7 +84,7 @@ jobs:
           Invoke-WebRequest "https://raw.githubusercontent.com/${{ github.repository }}/$env:VERSION/install.ps1" -OutFile "$env:RUNNER_TEMP\install.ps1"
           $bindir = "$env:RUNNER_TEMP\autodoc-bin"
           & "$env:RUNNER_TEMP\install.ps1" -Version "$env:VERSION" -InstallDir $bindir
-          $ver = & "$bindir\autodoc.exe" version
+          $ver = (& "$bindir\autodoc.exe" version | Out-String)
           Write-Host $ver
           $wantVer = $env:VERSION
           if ($wantVer.StartsWith("v")) { $wantVer = $wantVer.Substring(1) }
