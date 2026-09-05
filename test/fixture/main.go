@@ -194,6 +194,10 @@ window.saveMaterial=async()=>{const name=document.getElementById('fName').value,
 else{main.innerHTML='<div class=card><h1 role=heading>Painel</h1><p>Bem-vindo ao fixture do AutoDoc. Use o menu lateral para acessar <a href=/materiais role=link>Materiais</a>.</p></div>'}
 </script></body></html>`
 
+// cinematicHTML stages the V2 director flow. The receipt appears 9s after
+// send: the recorded dead window must stay clearly above the 1.5s
+// dead-wait compression threshold even when capture-phase overhead (sleep
+// overshoot, slow clicks) shifts the wait start later under parallel load.
 const cinematicHTML = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -245,7 +249,7 @@ dialog{border:0;border-radius:10px;padding:20px;min-width:320px}
 <p><button data-testid="cinematic-modal-save" onclick="document.getElementById('cmodal').close()">Fechar</button></p></dialog>
 <script>
 window.openConv=function(who){document.querySelectorAll('.conv').forEach(b=>b.classList.remove('active'));var p=document.getElementById('convPanel');var name=who==='alice'?'Alice Almeida':'Beto Barros';p.innerHTML='<strong></strong> <span>conversa aberta. Histórico carregado.</span>';p.querySelector('strong').textContent=name;document.querySelector('[data-testid=conv-'+who+']').classList.add('active')};
-window.sendMessage=async function(){var inp=document.getElementById('cinematic-input');var text=inp.value||'Olá, tudo bem?';var ld=document.getElementById('sendLoading');ld.style.display='block';var r=await fetch('/api/cinematic-send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})});await r.json();ld.style.display='none';var b=document.getElementById('bubble');b.style.display='block';b.textContent=text;var ok=document.getElementById('okState');ok.style.display='block';ok.textContent='Mensagem enviada com sucesso!';setTimeout(function(){var rc=document.getElementById('receipt');rc.style.display='block';rc.textContent='Comprovante #001 · entregue às '+new Date().toLocaleTimeString();},6000);};
+window.sendMessage=async function(){var inp=document.getElementById('cinematic-input');var text=inp.value||'Olá, tudo bem?';var ld=document.getElementById('sendLoading');ld.style.display='block';var r=await fetch('/api/cinematic-send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})});await r.json();ld.style.display='none';var b=document.getElementById('bubble');b.style.display='block';b.textContent=text;var ok=document.getElementById('okState');ok.style.display='block';ok.textContent='Mensagem enviada com sucesso!';setTimeout(function(){var rc=document.getElementById('receipt');rc.style.display='block';rc.textContent='Comprovante #001 · entregue às '+new Date().toLocaleTimeString();},9000);};
 </script></body></html>`
 
 func handleApp(w http.ResponseWriter, r *http.Request) {

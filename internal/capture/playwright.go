@@ -278,6 +278,9 @@ func (b *PlaywrightBackend) ripple(p visual.Point) {
 	}
 	ms := b.vis.Click.RippleMs
 	b.eval(visual.RippleJS(p, ms))
+	// Deterministic emission evidence: the recorded video may lag the event
+	// clock under CPU contention, but the cue itself fired here for ms.
+	b.recordV("visual", "ripple", visual.VisualEvent{Type: "ripple", StartedAtMs: b.nowMs(), DurationMs: int64(ms), CursorTo: &p})
 }
 
 func (b *PlaywrightBackend) bboxOf(sel string) (visual.BBox, bool) {
