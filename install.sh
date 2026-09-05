@@ -42,9 +42,11 @@ need_cmd uname
 need_cmd mkdir
 need_cmd mktemp
 if command -v curl >/dev/null 2>&1; then
-  download() { curl -fsSL -o "$2" "$1"; }
+  # Retry transient network failures (reset connections, 5xx); permanent
+  # errors still fail fast through the caller's message.
+  download() { curl -fsSL --retry 3 --retry-all-errors -o "$2" "$1"; }
 elif command -v wget >/dev/null 2>&1; then
-  download() { wget -q -O "$2" "$1"; }
+  download() { wget -q --tries=3 -O "$2" "$1"; }
 else
   fail "need curl or wget to download the release"
 fi
