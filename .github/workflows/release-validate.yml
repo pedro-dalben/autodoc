@@ -32,7 +32,7 @@ jobs:
       - name: Version must equal the tag
         run: |
           "$RUNNER_TEMP/autodoc-bin/autodoc" version | tee version.txt
-          grep -q "$VERSION" version.txt
+          grep -q "${VERSION#v}" version.txt
           "$RUNNER_TEMP/autodoc-bin/autodoc" --help > /dev/null
       - name: Explicit checksum validation
         run: |
@@ -63,7 +63,7 @@ jobs:
       - name: Version must equal the tag
         run: |
           "$RUNNER_TEMP/autodoc-bin/autodoc" version | tee version.txt
-          grep -q "$VERSION" version.txt
+          grep -q "${VERSION#v}" version.txt
           "$RUNNER_TEMP/autodoc-bin/autodoc" --help > /dev/null
       - name: Explicit checksum validation
         run: |
@@ -86,7 +86,9 @@ jobs:
           & "$env:RUNNER_TEMP\install.ps1" -Version "$env:VERSION" -InstallDir $bindir
           $ver = & "$bindir\autodoc.exe" version
           Write-Host $ver
-          if ($ver -notmatch [regex]::Escape($env:VERSION)) { throw "version mismatch: $ver" }
+          $wantVer = $env:VERSION
+          if ($wantVer.StartsWith("v")) { $wantVer = $wantVer.Substring(1) }
+          if ($ver -notmatch [regex]::Escape($wantVer)) { throw "version mismatch: $ver" }
           & "$bindir\autodoc.exe" --help | Out-Null
           # Reinstall over the top must succeed.
           & "$env:RUNNER_TEMP\install.ps1" -Version "$env:VERSION" -InstallDir $bindir
