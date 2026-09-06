@@ -527,8 +527,12 @@ const OverlayJS = `(function(){
     el.id=id;
     el.style.cssText='position:fixed;pointer-events:none;z-index:2147483646;'+css;
     document.documentElement.appendChild(el);
+    return el;
+  }
   var cursor=mk('div','__autodoc_cursor','left:0;top:0;width:22px;height:22px;opacity:0;transition:opacity .15s;');
   cursor.innerHTML='<svg width="22" height="22" viewBox="0 0 22 22"><path d="M5 2 L5 17 L9.5 13 L12 19 L14.5 17.8 L12 12 L17 12 Z" fill="#111" stroke="#fff" stroke-width="1.6"/></svg>';
+  var hl=mk('div','__autodoc_hl','left:0;top:0;width:0;height:0;opacity:0;border:2px solid rgba(79,140,255,.65);border-radius:6px;box-shadow:0 0 10px rgba(79,140,255,.3);');
+  var rp=mk('div','__autodoc_rp','left:0;top:0;width:36px;height:36px;margin:-18px 0 0 -18px;opacity:0;border-radius:50%;border:2px solid rgba(79,140,255,.7);');
   var halo=mk('div','__autodoc_halo','left:0;top:0;width:36px;height:36px;margin:-18px 0 0 -18px;opacity:0;border-radius:50%;border:2px solid rgba(79,140,255,.55);box-shadow:0 0 12px rgba(79,140,255,.25);');
   var haloOn=false;
   var st={cx:0,cy:0,raf:0};

@@ -90,3 +90,73 @@ func TestOverlayIsIsolated(t *testing.T) {
 		}
 	}
 }
+
+// TestOverlayJSParses guards the record-time overlay bundle: a syntax slip
+// (e.g. an unclosed brace) or a missing element declaration silently kills
+// every cursor/click cue while plan-level QA still passes. Fails the build
+// instead of shipping cue-less videos.
+func TestOverlayJSParses(t *testing.T) {
+	depth := 0
+	line := 1
+	var stack []int
+	var str byte
+	src := OverlayJS
+	for i := 0; i < len(src); i++ {
+		c := src[i]
+		if c == '\n' {
+			line++
+			continue
+		}
+		if str != 0 {
+			if c == '\\' {
+				i++
+				continue
+			}
+			if c == str {
+				str = 0
+			}
+			continue
+		}
+		if c == '"' || c == '\'' || c == '`' {
+			str = c
+			continue
+		}
+		if c == '/' && i+1 < len(src) && src[i+1] == '/' {
+			for i < len(src) && src[i] != '\n' {
+				i++
+			}
+			line++
+			continue
+		}
+		switch c {
+		case '{', '(', '[':
+			depth++
+			stack = append(stack, line)
+		case '}', ')', ']':
+			depth--
+			if depth < 0 {
+				t.Fatalf("overlay JS has extra closer %q at line %d", c, line)
+			}
+			stack = stack[:len(stack)-1]
+		}
+	}
+	if depth != 0 {
+		t.Fatalf("overlay JS has %d unclosed delimiters, first opened at line %d", depth, stack[0])
+	}
+	for _, want := range []string{
+		"window.__autodocCues={",
+		"return el;",
+		"var cursor=mk(",
+		"var hl=mk(",
+		"var rp=mk(",
+		"var halo=mk(",
+		"cursorShow:function",
+		"cursorMove:function",
+		"highlight:function",
+		"ripple:function",
+	} {
+		if !strings.Contains(OverlayJS, want) {
+			t.Fatalf("overlay JS missing required fragment %q", want)
+		}
+	}
+}

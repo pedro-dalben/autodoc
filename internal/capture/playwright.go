@@ -192,14 +192,15 @@ func (b *PlaywrightBackend) calloutShow(text string, bb visual.BBox, success boo
 
 func (b *PlaywrightBackend) calloutHide() { b.eval(visual.CalloutHideJS()) }
 
-func (b *PlaywrightBackend) ensureOverlay() {
+func (b *PlaywrightBackend) ensureOverlay() bool {
 	if !b.vis.CursorOn() && !b.vis.ClickOn() {
-		return
+		return true
 	}
 	b.eval(visual.EnsureOverlayJS())
 	if b.vis.Cursor.Halo && b.vis.CursorOn() {
 		b.eval(visual.HaloJS(true))
 	}
+	return b.evalBool(`!!window.__autodocCues`)
 }
 
 func (b *PlaywrightBackend) parkPos() visual.Point {
@@ -326,7 +327,9 @@ func (b *PlaywrightBackend) Navigate(url string) error {
 	if _, err := b.page.Goto(url, playwright.PageGotoOptions{WaitUntil: playwright.WaitUntilStateLoad}); err != nil {
 		return fmt.Errorf("goto %s: %w", url, err)
 	}
-	b.ensureOverlay()
+	if !b.ensureOverlay() {
+		return fmt.Errorf("goto %s: autodoc overlay failed to install (record-time cursor/click cues unavailable)", url)
+	}
 	b.record("navigate", url)
 	return nil
 }
@@ -380,6 +383,10 @@ func (b *PlaywrightBackend) resolveValue(a storyboard.Action) (string, bool, err
 
 func (b *PlaywrightBackend) cueFocus(sel string, loc playwright.Locator, act *storyboard.Action) (visual.BBox, visual.Point, bool) {
 	b.ensureOverlay()
+	// Overlay cues paint in viewport coordinates: bring a below-fold target
+	// into view before measuring, otherwise cursor/highlight/ripple render
+	// off-screen while the click still lands (via auto-scroll) unseen.
+	_ = loc.ScrollIntoViewIfNeeded(playwright.LocatorScrollIntoViewIfNeededOptions{Timeout: playwright.Float(3000)})
 	bb, ok := b.bboxOf(sel)
 	if !ok {
 		return visual.BBox{}, visual.Point{}, false
