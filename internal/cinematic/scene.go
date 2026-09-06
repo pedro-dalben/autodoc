@@ -192,6 +192,12 @@ func InferAnchor(cur recipe.StepPlan, neighborAction *recipe.StepPlan, speechAnc
 		}
 		return VisualAnchor{Kind: kind, Describe: desc, TargetKey: desc}
 	}
+	// Backward neighbor: narration describing awaited state anchors on
+	// the wait target (the UI the viewer is looking at).
+	if pick.Kind == recipe.StepWait && pick.Wait != nil && pick.Wait.Target != nil && !pick.Wait.Target.Empty() {
+		desc := pick.Wait.Target.Describe()
+		return VisualAnchor{Kind: AnchorContainer, Describe: desc, TargetKey: desc}
+	}
 	if pick.Action != nil && pick.Action.Type == "goto" {
 		u := pick.Action.URL
 		if u == "" {
@@ -351,6 +357,16 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 			if st.Kind == recipe.StepSpeech && next != nil && next.Kind == recipe.StepAction {
 				neighborAction = next
 			}
+			// Transitional narration ("here are the results", "done!")
+			// usually follows the state it describes: fall back to the
+			// previous action or targeted wait so the camera holds on
+			// real UI instead of drifting to viewport.
+			if st.Kind == recipe.StepSpeech && neighborAction == nil && i > 0 {
+				if prev := flat[i-1]; prev.Kind == recipe.StepAction ||
+					(prev.Kind == recipe.StepWait && prev.Wait != nil && prev.Wait.Target != nil && !prev.Wait.Target.Empty()) {
+					neighborAction = prev
+				}
+			}
 			if st.Kind != recipe.StepSpeech && st.Kind != recipe.StepAction && st.Kind != recipe.StepWait && st.Kind != recipe.StepHold {
 				continue
 			}
@@ -405,6 +421,13 @@ func PlanScenes(r *recipe.Recipe, sb *storyboard.Storyboard) *ScenePlanDoc {
 				}
 			}
 			anchor := InferAnchor(*st, neighborAction, st.SpeechAnchor)
+			// Scene-opening narration has no UI context yet: it describes
+			// the page as a whole, so the establishing viewport is the
+			// honest anchor (not a masking default).
+			if st.Kind == recipe.StepSpeech && i == 0 && neighborAction == nil && st.SpeechAnchor == "" &&
+				anchor.Kind == AnchorNone {
+				anchor = VisualAnchor{Kind: AnchorViewport, Describe: "opening establishing shot"}
+			}
 			bp := BeatPlan{
 				SceneID: sc.ID, BeatID: beatOf[st], Index: idx,
 				Type: bt, Intent: IntentFor(bt, narration, actionLabel),

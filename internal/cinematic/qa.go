@@ -85,10 +85,20 @@ func RunQA(ft *timeline.FinalTimeline, scenes *ScenePlanDoc, att *AttentionPlan,
 	gate("visual-anchors", anchorPass, fmt.Sprintf("%d/%d narration beats anchored", anchored, narr), fmt.Sprintf("%d/%d", anchored, narr), fmt.Sprintf("%d/%d", narr, narr))
 
 	// 4. Action anticipation: every anticipation-demanding beat directed.
-	// Explicit "none" overrides are authorial intent, not failures.
+	// Explicit "none" overrides and attention-budget throttling are
+	// director intent, not failures (the budget exists to avoid
+	// mechanical zoom/spotlight repetition).
+	budgetCut := map[int]bool{}
+	if att != nil {
+		for _, d := range att.Decisions {
+			if d.Reason == "attention-budget" {
+				budgetCut[d.BeatIndex] = true
+			}
+		}
+	}
 	need, got := 0, 0
 	for _, b := range scenes.Beats {
-		if b.NeedsAnticipation && b.AttentionOverride != "none" && b.CameraOverride != "none" {
+		if b.NeedsAnticipation && b.AttentionOverride != "none" && b.CameraOverride != "none" && !budgetCut[b.Index] {
 			need++
 			for _, d := range att.Decisions {
 				if d.BeatIndex == b.Index && d.Anticipate {
