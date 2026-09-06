@@ -84,7 +84,7 @@ A rendered example ships in
 - [Browser and auth](docs/browser.md) · [Configuration](docs/config.md)
 - [CLI reference](docs/cli.md) (generated from the CLI)
 - [Troubleshooting](docs/troubleshooting.md) · [Security](docs/security.md)
-- [Development](docs/development.md) · [Release](docs/release.md)
+- [Evidence](docs/evidence.md) · [Development](docs/development.md) · [Release](docs/release.md)
   · [Contributing](CONTRIBUTING.md)
 
 ## Development
