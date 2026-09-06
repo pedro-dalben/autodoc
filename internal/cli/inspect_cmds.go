@@ -13,9 +13,12 @@ import (
 	"github.com/pedro-dalben/autodoc/internal/doctor"
 	"github.com/pedro-dalben/autodoc/internal/evidence"
 	"github.com/pedro-dalben/autodoc/internal/mcp"
+	"github.com/pedro-dalben/autodoc/internal/pipeline"
+	"github.com/pedro-dalben/autodoc/internal/runreport"
 	"github.com/pedro-dalben/autodoc/internal/storyboard"
 	"github.com/pedro-dalben/autodoc/internal/ui"
 	"github.com/pedro-dalben/autodoc/internal/usage"
+	"github.com/pedro-dalben/autodoc/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -254,8 +257,92 @@ func newEvidenceCmd() *cobra.Command {
 	}
 	invalidate.Flags().StringVar(&invKind, "kind", "", "evidence kind (ui_inventory|ui_diff|page_state)")
 	invalidate.Flags().StringVar(&invURL, "url", "", "page URL scope")
-	c.AddCommand(get, stats, prune, invalidate)
+	c.AddCommand(get, stats, prune, invalidate, newRunReportCmd(), newRunCompareCmd())
 	return c
+}
+
+// refreshRunEvidence regenerates evidence.json + evidence.txt for runID.
+// Best-effort observation: it never fails the calling pipeline command.
+func refreshRunEvidence(workDir, runID, tutorial string) {
+	if runID == "" {
+		runID = runreport.LatestRun(workDir)
+	}
+	if runID == "" {
+		return
+	}
+	rep := runreport.Collect(workDir, runID, version.Version, tutorial)
+	_ = rep.WriteJSON(filepath.Join(workDir, runID, "evidence.json"))
+	_ = os.WriteFile(filepath.Join(workDir, runID, "evidence.txt"), []byte(rep.RenderText()), 0o644)
+}
+
+func newRunReportCmd() *cobra.Command {
+	var sbPath, runID, format string
+	cmd := &cobra.Command{
+		Use:   "report",
+		Short: "Aggregate this run's pipeline facts into evidence.json + human summary",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, cfg, resolved, err := loadProject(cmd, sbPath)
+			if err != nil {
+				return err
+			}
+			run, err := pipeline.NewRun(root, resolved, cfg)
+			if err != nil {
+				return err
+			}
+			if err := run.Compile(); err != nil {
+				return err
+			}
+			if runID == "" {
+				runID = runreport.LatestRun(run.WorkDir)
+				if runID == "" {
+					runID = run.RunID
+				}
+			}
+			rep := runreport.Collect(run.WorkDir, runID, version.Version, tutorialNameFor(resolved, run))
+			if err := rep.WriteJSON(filepath.Join(run.WorkDir, runID, "evidence.json")); err != nil {
+				return err
+			}
+			if format == "json" {
+				fmt.Fprintln(cmd.OutOrStdout(), mustJSON(rep))
+				return nil
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), rep.RenderText())
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
+	cmd.Flags().StringVar(&runID, "run", "", "run id (default: latest with recipe.json)")
+	cmd.Flags().StringVar(&format, "format", "text", "text|json")
+	return cmd
+}
+
+func newRunCompareCmd() *cobra.Command {
+	var sbPath string
+	cmd := &cobra.Command{
+		Use:   "compare <run-a> <run-b>",
+		Short: "Compare two run evidence reports (before/after, reuse deltas)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, cfg, resolved, err := loadProject(cmd, sbPath)
+			if err != nil {
+				return err
+			}
+			run, err := pipeline.NewRun(root, resolved, cfg)
+			if err != nil {
+				return err
+			}
+			if err := run.Compile(); err != nil {
+				return err
+			}
+			tutorial := tutorialNameFor(resolved, run)
+			a := runreport.Collect(run.WorkDir, args[0], version.Version, tutorial)
+			b := runreport.Collect(run.WorkDir, args[1], version.Version, tutorial)
+			fmt.Fprint(cmd.OutOrStdout(), runreport.RenderCompare(runreport.Compare(a, b)))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&sbPath, "storyboard", "", "path to storyboard.yml")
+	return cmd
 }
 
 func newContextCmd() *cobra.Command {

@@ -126,6 +126,15 @@ Diagnose autodoc, media, browser, TTS, harnesses, skill
 ```
 
 
+## `autodoc evidence compare`
+
+Compare two run evidence reports (before/after, reuse deltas)
+
+```
+--storyboard string   path to storyboard.yml
+```
+
+
 ## `autodoc evidence get`
 
 Print the raw payload behind an evidence ref
@@ -147,6 +156,17 @@ Drop evidence older than --older-than (default 168h)
 
 ```
 --older-than string   drop refs older than this (Go duration) (default "168h")
+```
+
+
+## `autodoc evidence report`
+
+Aggregate this run's pipeline facts into evidence.json + human summary
+
+```
+--format string       text|json (default "text")
+      --run string          run id (default: latest with recipe.json)
+      --storyboard string   path to storyboard.yml
 ```
 
 

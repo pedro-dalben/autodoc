@@ -429,6 +429,7 @@ func newTTSCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s %s (%.2fs)\n", status, res.ID, res.Duration)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "tts: %d segments (%d hits, %d misses)\n", rep.Segments, rep.Hits, rep.Misses)
+			refreshRunEvidence(run.WorkDir, run.RunID, tutorialNameFor(resolved, run))
 			return nil
 		},
 	}
@@ -527,6 +528,7 @@ func newRecordCmd() *cobra.Command {
 			if run.Final != nil && run.Final.Sync != nil {
 				printSyncReport(cmd.OutOrStdout(), run.Final)
 			}
+			refreshRunEvidence(run.WorkDir, run.RunID, tutorialNameFor(resolved, run))
 			return nil
 		},
 	}
@@ -605,6 +607,7 @@ func newRenderCmd() *cobra.Command {
 					return err
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "rendered %s (%.2fs)\n", outMP4, run.Timeline.TotalS)
+				refreshRunEvidence(run.WorkDir, run.RunID, tutorialNameFor(resolved, run))
 				return nil
 			}
 			if debugTimeline {
@@ -637,7 +640,13 @@ func newRenderCmd() *cobra.Command {
 					status = "FAIL"
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "AUTODOC_CINEMATIC_QA: %s (score %d/100)\n", status, bundle.Report.Score)
+				// Keep this render's run dir self-describing: the loaded final
+				// timeline is same-hash by construction, so persisting it here
+				// lets the evidence report aggregate one complete run.
+				_ = run.Final.WriteJSON(filepath.Join(run.WorkDir, run.RunID, "final_timeline.json"))
+				_ = cinematic.WriteBundle(filepath.Join(run.WorkDir, run.RunID), bundle)
 			}
+			refreshRunEvidence(run.WorkDir, run.RunID, tutorialNameFor(resolved, run))
 			return nil
 		},
 	}
@@ -738,6 +747,7 @@ func newExportCmd() *cobra.Command {
 				}
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "exported %s\n", outDir)
+			refreshRunEvidence(run.WorkDir, run.RunID, tutorialNameFor(resolved, run))
 			return nil
 		},
 	}
@@ -1138,6 +1148,16 @@ func slugify(s string) string {
 		out = "tutorial"
 	}
 	return out
+}
+
+// tutorialNameFor derives the publishable tutorial name from the
+// storyboard path, mirroring the export command convention.
+func tutorialNameFor(resolved string, run *pipeline.Run) string {
+	name := strings.TrimSuffix(filepath.Base(resolved), filepath.Ext(resolved))
+	if name == "" || name == "storyboard" {
+		name = slugify(run.SB.Meta.Title)
+	}
+	return name
 }
 
 func copyFile(src, dst string) error {

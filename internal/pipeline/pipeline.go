@@ -232,7 +232,39 @@ func (r *Run) SynthesizeTTS(ctx context.Context, provider tts.Provider, cache *t
 		return rep, err
 	}
 	_ = tl.WriteJSON(filepath.Join(r.WorkDir, "timeline.json"))
+	writeTTSReport(filepath.Join(r.WorkDir, r.RunID, "tts-report.json"), rep)
 	return rep, nil
+}
+
+// ttsReportSegment is the privacy-safe per-segment record: ID, content
+// hash, cache status and duration. Speech text is never persisted here;
+// the run evidence report aggregates this file.
+func writeTTSReport(path string, rep *TTSReport) {
+	type seg struct {
+		ID       string  `json:"id"`
+		Hash     string  `json:"hash"`
+		Cached   bool    `json:"cached"`
+		Duration float64 `json:"duration_s"`
+		Bytes    int64   `json:"bytes"`
+	}
+	out := struct {
+		Segments  int     `json:"segments_total"`
+		Hits      int     `json:"cache_hits"`
+		Misses    int     `json:"cache_misses"`
+		SynthSecs float64 `json:"synthesized_duration_s"`
+		Segments_ []seg   `json:"segments"`
+	}{Segments: rep.Segments, Hits: rep.Hits, Misses: rep.Misses}
+	for _, res := range rep.Results {
+		out.Segments_ = append(out.Segments_, seg{ID: res.ID, Hash: res.Hash, Cached: res.Cached, Duration: res.Duration, Bytes: res.Bytes})
+		if !res.Cached {
+			out.SynthSecs += res.Duration
+		}
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
 func (r *Run) LoadTimeline() error {
