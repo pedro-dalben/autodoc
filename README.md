@@ -21,17 +21,14 @@ storyboard.yml  ->  TTS (cached per speech segment)  ->  Playwright replay
 
 No Go toolchain needed.
 
-> No stable release exists yet. Current pre-release: `v0.1.0-rc.3`.
-> Install it explicitly pinned (a bare install resolves `latest stable`
-> and refuses while only pre-releases exist):
+> Stable release: `v0.1.0`. A bare install resolves `latest stable`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh -s -- --version v0.1.0-rc.3
+curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh
 ```
 
 ```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.ps1 -OutFile install.ps1
-.\install.ps1 -Version v0.1.0-rc.3
+irm https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.ps1 | iex
 ```
 
 Details and FFmpeg setup: [docs/install.md](docs/install.md).

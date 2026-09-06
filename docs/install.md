@@ -4,26 +4,11 @@
 
 No Go toolchain needed.
 
-> No stable release exists yet. The current release candidate is
-> `v0.1.0-rc.3` (pre-release, for real-world validation before `v0.1.0`).
-> Install it explicitly pinned — a bare install resolves `latest stable`
-> and will refuse while only pre-releases exist:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh -s -- --version v0.1.0-rc.3
-```
-
-```powershell
-.\install.ps1 -Version v0.1.0-rc.3
-```
-
-Linux or macOS (stable releases only, once they exist):
+> Stable release: `v0.1.0`. A bare install resolves `latest stable`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.sh | sh
 ```
-
-Windows (PowerShell):
 
 ```powershell
 irm https://raw.githubusercontent.com/pedro-dalben/autodoc/main/install.ps1 | iex
@@ -38,11 +23,11 @@ prints the exact line to add.
 Reproducible install of a specific version:
 
 ```bash
-curl -fsSL .../install.sh | sh -s -- --version v0.1.0-rc.3
+curl -fsSL .../install.sh | sh -s -- --version v0.1.0
 ```
 
 ```powershell
-.\install.ps1 -Version v0.1.0-rc.3
+.\install.ps1 -Version v0.1.0
 ```
 
 Supported platforms (these are the archives GoReleaser builds):
